@@ -1,0 +1,176 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String   @id @default(uuid())
+  email             String   @unique
+  password          String
+  name              String
+  lastName          String
+  preferredCurrency String   @default("ARS")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  ownedWorkspaces  Workspace[]
+  workspaceMembers WorkspaceMember[]
+  bankAccounts     BankAccount[]
+  transactions     Transaction[]
+  budgets          Budget[]
+  savings          Saving[]
+}
+
+model Workspace {
+  id        String   @id @default(uuid())
+  name      String
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  cutoffDay Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members      WorkspaceMember[]
+  transactions Transaction[]
+  categories   Category[]
+}
+
+model WorkspaceMember {
+  id                       String    @id @default(uuid())
+  workspaceId              String
+  workspace                Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId                   String?
+  user                     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  email                    String
+  nameAlias                String
+  responsibilityPercentage Decimal   @default(50)
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  paidTransactions Transaction[] @relation("PaidBy")
+}
+
+model Category {
+  id          String     @id @default(uuid())
+  name        String
+  type        String
+  color       String
+  icon        String
+  scope       String
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  transactions Transaction[]
+  Budget       Budget[]
+}
+
+model BankAccount {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name           String
+  type           String
+  currency       String
+  currentBalance Decimal
+  initialBalance Decimal
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  cards        Card[]
+  transactions Transaction[]
+}
+
+model Card {
+  id                  String      @id @default(uuid())
+  name                String
+  type                String
+  currency            String?
+  creditLimit         Decimal?
+  linkedBankAccountId String
+  linkedBankAccount   BankAccount @relation(fields: [linkedBankAccountId], references: [id], onDelete: Cascade)
+  statementCloseDay   Int
+  dueDay              Int
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  transactions Transaction[]
+}
+
+model Budget {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount     Decimal
+  currency   String
+  type       String
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  month      Int
+  year       Int
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([userId, type, categoryId, month, year])
+}
+
+model Saving {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount      Decimal
+  currency    String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Transaction {
+  id          String   @id @default(uuid())
+  amount      Decimal
+  currency    String
+  date        DateTime
+  description String?
+  type        String
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  paidByMemberId String?
+  paidByMember   WorkspaceMember? @relation("PaidBy", fields: [paidByMemberId], references: [id], onDelete: SetNull)
+
+  paymentMethod String
+  bankAccountId String?
+  bankAccount   BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+  cardId        String?
+  card          Card?        @relation(fields: [cardId], references: [id], onDelete: SetNull)
+
+  isRecurrent    Boolean @default(false)
+  recurrenceRule Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ExchangeRate {
+  id           String   @id @default(uuid())
+  fromCurrency String
+  toCurrency   String
+  rate         Decimal
+  date         DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([fromCurrency, toCurrency, date])
+}
