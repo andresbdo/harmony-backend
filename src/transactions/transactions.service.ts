@@ -15,10 +15,36 @@ export class TransactionsService {
         }
     }
 
+    private async recalculateBalance(bankAccountId: string): Promise<void> {
+        const account = await this.prisma.bankAccount.findUnique({
+            where: { id: bankAccountId },
+            select: { initialBalance: true },
+        });
+
+        if (!account) return;
+
+        const transactions = await this.prisma.transaction.findMany({
+            where: { bankAccountId },
+            select: { amount: true, type: true },
+        });
+
+        let balance = parseFloat(account.initialBalance.toString());
+        for (const t of transactions) {
+            const amount = parseFloat(t.amount.toString());
+            if (t.type === 'INCOME') balance += amount;
+            else if (t.type === 'EXPENSE') balance -= amount;
+        }
+
+        await this.prisma.bankAccount.update({
+            where: { id: bankAccountId },
+            data: { currentBalance: balance },
+        });
+    }
+
     async create(userId: string, createTransactionDto: CreateTransactionDto) {
         await this.validatePaymentMethod(createTransactionDto);
 
-        return this.prisma.transaction.create({
+        const transaction = await this.prisma.transaction.create({
             data: {
                 amount: createTransactionDto.amount,
                 currency: createTransactionDto.currency,
@@ -36,6 +62,12 @@ export class TransactionsService {
                 recurrenceRule: createTransactionDto.recurrenceRule,
             },
         });
+
+        if (createTransactionDto.bankAccountId) {
+            await this.recalculateBalance(createTransactionDto.bankAccountId);
+        }
+
+        return transaction;
     }
 
     async findAll(userId: string, filters: { workspaceId?: string; categoryId?: string; type?: string }) {
@@ -71,22 +103,33 @@ export class TransactionsService {
     }
 
     async update(id: string, userId: string, updateTransactionDto: UpdateTransactionDto) {
-        await this.findOne(id, userId);
+        const existing = await this.findOne(id, userId);
         await this.validatePaymentMethod(updateTransactionDto);
 
-        return this.prisma.transaction.update({
+        const updated = await this.prisma.transaction.update({
             where: { id },
             data: {
                 ...updateTransactionDto,
                 date: updateTransactionDto.date ? new Date(updateTransactionDto.date) : undefined,
             },
         });
+
+        const accountsToRecalculate = new Set<string>();
+        if (existing.bankAccountId) accountsToRecalculate.add(existing.bankAccountId);
+        if (updateTransactionDto.bankAccountId) accountsToRecalculate.add(updateTransactionDto.bankAccountId);
+        for (const accountId of accountsToRecalculate) {
+            await this.recalculateBalance(accountId);
+        }
+
+        return updated;
     }
 
     async remove(id: string, userId: string) {
-        await this.findOne(id, userId);
-        return this.prisma.transaction.delete({
-            where: { id },
-        });
+        const transaction = await this.findOne(id, userId);
+        await this.prisma.transaction.delete({ where: { id } });
+        if (transaction.bankAccountId) {
+            await this.recalculateBalance(transaction.bankAccountId);
+        }
+        return { deleted: true };
     }
 }
