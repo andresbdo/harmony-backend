@@ -16,10 +16,10 @@ import {
     CreateCardDto,
     UpdateCardDto,
 } from './dto/account.dto';
-import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { WorkspaceMemberGuard } from 'src/workspaces/workspace-member.guard';
 
 @Controller('accounts')
-@UseGuards(JwtAuthGuard)
+@UseGuards(WorkspaceMemberGuard)
 export class AccountsController {
     constructor(private readonly accountsService: AccountsService) { }
 

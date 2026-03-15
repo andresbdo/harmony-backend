@@ -12,10 +12,10 @@ import {
 } from '@nestjs/common';
 import { TransactionsService } from './transactions.service';
 import { CreateTransactionDto, UpdateTransactionDto } from './dto/transaction.dto';
-import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { WorkspaceMemberGuard } from 'src/workspaces/workspace-member.guard';
 
 @Controller('transactions')
-@UseGuards(JwtAuthGuard)
+@UseGuards(WorkspaceMemberGuard)
 export class TransactionsController {
     constructor(private readonly transactionsService: TransactionsService) { }
 

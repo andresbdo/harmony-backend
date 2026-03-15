@@ -12,10 +12,10 @@ import {
 } from '@nestjs/common';
 import { BudgetsService } from './budgets.service';
 import { CreateBudgetDto, UpdateBudgetDto, CreateSavingDto, UpdateSavingDto } from './dto/budget.dto';
-import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { WorkspaceMemberGuard } from 'src/workspaces/workspace-member.guard';
 
 @Controller('budgets')
-@UseGuards(JwtAuthGuard)
+@UseGuards(WorkspaceMemberGuard)
 export class BudgetsController {
     constructor(private readonly budgetsService: BudgetsService) { }
 
