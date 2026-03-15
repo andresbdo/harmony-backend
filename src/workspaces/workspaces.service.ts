@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { randomBytes } from 'crypto';
 import { CreateWorkspaceDto, UpdateWorkspaceDto, AddMemberDto, UpdateMemberDto } from './dto/workspace.dto';
 
 @Injectable()
@@ -7,22 +8,27 @@ export class WorkspacesService {
     constructor(private prisma: PrismaService) { }
 
     async create(userId: string, dto: CreateWorkspaceDto) {
-        const user = await this.prisma.user.findUnique({ where: { id: userId } });
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { email: true, name: true },
+        });
         if (!user) throw new NotFoundException('User not found');
 
         return this.prisma.workspace.create({
             data: {
                 ...dto,
                 ownerId: userId,
+                inviteToken: randomBytes(16).toString('hex'),
                 members: {
                     create: {
+                        userId,
                         email: user.email,
-                        userId: userId,
-                        nameAlias: 'Owner',
-                        responsibilityPercentage: 100, // Initial owner
+                        nameAlias: user.name ?? 'Owner',
+                        responsibilityPercentage: 100,
                     },
                 },
             },
+            include: { members: true },
         });
     }
 
@@ -119,10 +125,59 @@ export class WorkspacesService {
         };
     }
 
+    async updateMember(workspaceId: string, memberId: string, userId: string, dto: UpdateMemberDto) {
+        const workspace = await this.findOne(workspaceId, userId);
+        if (workspace.ownerId !== userId) throw new ForbiddenException('Only owners can update members');
+
+        return this.prisma.workspaceMember.update({
+            where: { id: memberId },
+            data: dto,
+        });
+    }
+
+    async removeMember(workspaceId: string, memberId: string, userId: string) {
+        const workspace = await this.findOne(workspaceId, userId);
+        if (workspace.ownerId !== userId) throw new ForbiddenException('Only owners can remove members');
+
+        return this.prisma.workspaceMember.delete({ where: { id: memberId } });
+    }
+
     async remove(id: string, userId: string) {
         const workspace = await this.findOne(id, userId);
         if (workspace.ownerId !== userId) throw new ForbiddenException('Only owners can delete workspaces');
 
         return this.prisma.workspace.delete({ where: { id } });
+    }
+
+    async joinByToken(token: string, userId: string) {
+        const workspace = await this.prisma.workspace.findUnique({
+            where: { inviteToken: token },
+            include: { members: true },
+        });
+        if (!workspace) throw new NotFoundException('Enlace de invitación inválido');
+
+        const alreadyMember = workspace.members.some(m => m.userId === userId);
+        if (alreadyMember) return workspace;
+
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { email: true, name: true },
+        });
+        if (!user) throw new NotFoundException('User not found');
+
+        await this.prisma.workspaceMember.create({
+            data: {
+                workspaceId: workspace.id,
+                userId,
+                email: user.email,
+                nameAlias: user.name,
+                responsibilityPercentage: 0,
+            },
+        });
+
+        return this.prisma.workspace.findUnique({
+            where: { id: workspace.id },
+            include: { members: true },
+        });
     }
 }
