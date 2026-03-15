@@ -1,6 +1,10 @@
-import { IsString, IsNumber, IsOptional, Min, Max } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsNotEmpty, Min, Max } from 'class-validator';
 
 export class CreateBudgetDto {
+    @IsString()
+    @IsNotEmpty()
+    workspaceId: string;
+
     @IsNumber()
     @Min(0)
     amount: number;
@@ -27,6 +31,10 @@ export class CreateBudgetDto {
 export class UpdateBudgetDto extends CreateBudgetDto { }
 
 export class CreateSavingDto {
+    @IsString()
+    @IsNotEmpty()
+    workspaceId: string;
+
     @IsNumber()
     @Min(0)
     amount: number;

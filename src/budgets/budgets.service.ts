@@ -1,83 +1,103 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { EncryptionService } from 'src/common/encryption/encryption.service';
 import { CreateBudgetDto, UpdateBudgetDto, CreateSavingDto, UpdateSavingDto } from './dto/budget.dto';
 
 @Injectable()
 export class BudgetsService {
-    constructor(private prisma: PrismaService) { }
+  constructor(
+    private prisma: PrismaService,
+    private encryption: EncryptionService,
+  ) {}
 
-    // Budget Methods
-    async createBudget(userId: string, dto: CreateBudgetDto) {
-        return this.prisma.budget.create({
-            data: { ...dto, userId },
-        });
-    }
+  private decryptSaving(saving: any) {
+    return saving.description
+      ? { ...saving, description: this.encryption.decrypt(saving.description) }
+      : saving;
+  }
 
-    async findAllBudgets(userId: string, year: number, month?: number) {
-        return this.prisma.budget.findMany({
-            where: {
-                userId,
-                year,
-                month: month || undefined,
-            },
-            include: { category: true },
-        });
-    }
+  // Budget Methods
+  async createBudget(workspaceId: string, dto: CreateBudgetDto) {
+    return this.prisma.budget.create({
+      data: {
+        workspaceId,
+        amount: dto.amount,
+        currency: dto.currency,
+        type: dto.type,
+        categoryId: dto.categoryId,
+        month: dto.month,
+        year: dto.year,
+      },
+    });
+  }
 
-    async findOneBudget(id: string, userId: string) {
-        const budget = await this.prisma.budget.findFirst({
-            where: { id, userId },
-            include: { category: true },
-        });
-        if (!budget) throw new NotFoundException('Budget not found');
-        return budget;
-    }
+  async findAllBudgets(workspaceId: string, year: number, month?: number) {
+    return this.prisma.budget.findMany({
+      where: { workspaceId, year, month: month || undefined },
+      include: { category: true },
+    });
+  }
 
-    async updateBudget(id: string, userId: string, dto: UpdateBudgetDto) {
-        await this.findOneBudget(id, userId);
-        return this.prisma.budget.update({
-            where: { id },
-            data: dto,
-        });
-    }
+  async findOneBudget(id: string, workspaceId: string) {
+    const budget = await this.prisma.budget.findFirst({
+      where: { id, workspaceId },
+      include: { category: true },
+    });
+    if (!budget) throw new NotFoundException('Budget not found');
+    return budget;
+  }
 
-    async removeBudget(id: string, userId: string) {
-        await this.findOneBudget(id, userId);
-        return this.prisma.budget.delete({ where: { id } });
-    }
+  async updateBudget(id: string, workspaceId: string, dto: UpdateBudgetDto) {
+    await this.findOneBudget(id, workspaceId);
+    return this.prisma.budget.update({ where: { id }, data: dto });
+  }
 
-    // Saving Methods
-    async createSaving(userId: string, dto: CreateSavingDto) {
-        return this.prisma.saving.create({
-            data: { ...dto, userId },
-        });
-    }
+  async removeBudget(id: string, workspaceId: string) {
+    await this.findOneBudget(id, workspaceId);
+    return this.prisma.budget.delete({ where: { id } });
+  }
 
-    async findAllSavings(userId: string) {
-        return this.prisma.saving.findMany({
-            where: { userId },
-            orderBy: { createdAt: 'desc' },
-        });
-    }
+  // Saving Methods
+  async createSaving(workspaceId: string, dto: CreateSavingDto) {
+    const saving = await this.prisma.saving.create({
+      data: {
+        workspaceId,
+        amount: dto.amount,
+        currency: dto.currency,
+        description: dto.description ? this.encryption.encrypt(dto.description) : null,
+      },
+    });
+    return this.decryptSaving(saving);
+  }
 
-    async findOneSaving(id: string, userId: string) {
-        const saving = await this.prisma.saving.findFirst({
-            where: { id, userId },
-        });
-        if (!saving) throw new NotFoundException('Saving not found');
-        return saving;
-    }
+  async findAllSavings(workspaceId: string) {
+    const savings = await this.prisma.saving.findMany({
+      where: { workspaceId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return savings.map(this.decryptSaving.bind(this));
+  }
 
-    async updateSaving(id: string, userId: string, dto: UpdateSavingDto) {
-        await this.findOneSaving(id, userId);
-        return this.prisma.saving.update({
-            where: { id },
-            data: dto,
-        });
-    }
+  async findOneSaving(id: string, workspaceId: string) {
+    const saving = await this.prisma.saving.findFirst({ where: { id, workspaceId } });
+    if (!saving) throw new NotFoundException('Saving not found');
+    return this.decryptSaving(saving);
+  }
 
-    async removeSaving(id: string, userId: string) {
-        await this.findOneSaving(id, userId);
-        return this.prisma.saving.delete({ where: { id } });
-    }
+  async updateSaving(id: string, workspaceId: string, dto: UpdateSavingDto) {
+    await this.findOneSaving(id, workspaceId);
+    const updated = await this.prisma.saving.update({
+      where: { id },
+      data: {
+        ...dto,
+        description: dto.description ? this.encryption.encrypt(dto.description) : undefined,
+      },
+    });
+    return this.decryptSaving(updated);
+  }
+
+  async removeSaving(id: string, workspaceId: string) {
+    await this.findOneSaving(id, workspaceId);
+    return this.prisma.saving.delete({ where: { id } });
+  }
 }
