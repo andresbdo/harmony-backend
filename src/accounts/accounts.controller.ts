@@ -26,52 +26,52 @@ export class AccountsController {
     // Bank Accounts
     @Post()
     createAccount(@Request() req, @Body() dto: CreateBankAccountDto) {
-        return this.accountsService.createAccount(req.user.id, dto);
+        return this.accountsService.createAccount(req.workspaceId, dto);
     }
 
     @Get()
     findAllAccounts(@Request() req) {
-        return this.accountsService.findAllAccounts(req.user.id);
+        return this.accountsService.findAllAccounts(req.workspaceId);
     }
 
     @Get(':id')
     findOneAccount(@Request() req, @Param('id') id: string) {
-        return this.accountsService.findOneAccount(id, req.user.id);
+        return this.accountsService.findOneAccount(id, req.workspaceId);
     }
 
     @Patch(':id')
     updateAccount(@Request() req, @Param('id') id: string, @Body() dto: UpdateBankAccountDto) {
-        return this.accountsService.updateAccount(id, req.user.id, dto);
+        return this.accountsService.updateAccount(id, req.workspaceId, dto);
     }
 
     @Delete(':id')
     removeAccount(@Request() req, @Param('id') id: string) {
-        return this.accountsService.removeAccount(id, req.user.id);
+        return this.accountsService.removeAccount(id, req.workspaceId);
     }
 
     // Cards
     @Post('cards')
     createCard(@Request() req, @Body() dto: CreateCardDto) {
-        return this.accountsService.createCard(req.user.id, dto);
+        return this.accountsService.createCard(req.workspaceId, dto);
     }
 
     @Get('cards/all')
     findAllCards(@Request() req) {
-        return this.accountsService.findAllCards(req.user.id);
+        return this.accountsService.findAllCards(req.workspaceId);
     }
 
     @Get('cards/:id')
     findOneCard(@Request() req, @Param('id') id: string) {
-        return this.accountsService.findOneCard(id, req.user.id);
+        return this.accountsService.findOneCard(id, req.workspaceId);
     }
 
     @Patch('cards/:id')
     updateCard(@Request() req, @Param('id') id: string, @Body() dto: UpdateCardDto) {
-        return this.accountsService.updateCard(id, req.user.id, dto);
+        return this.accountsService.updateCard(id, req.workspaceId, dto);
     }
 
     @Delete('cards/:id')
     removeCard(@Request() req, @Param('id') id: string) {
-        return this.accountsService.removeCard(id, req.user.id);
+        return this.accountsService.removeCard(id, req.workspaceId);
     }
 }
