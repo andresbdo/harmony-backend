@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { EncryptionService } from 'src/common/encryption/encryption.service';
 import {
     DashboardSummaryDto,
     RecentTransactionDto,
@@ -9,9 +10,22 @@ import {
 
 @Injectable()
 export class DashboardService {
-    constructor(private prisma: PrismaService) { }
+    constructor(
+        private prisma: PrismaService,
+        private encryption: EncryptionService,
+    ) { }
+
+    private async getUserWorkspaceIds(userId: string): Promise<string[]> {
+        const memberships = await this.prisma.workspaceMember.findMany({
+            where: { userId },
+            select: { workspaceId: true },
+        });
+        return memberships.map(m => m.workspaceId);
+    }
 
     async getSummary(userId: string): Promise<DashboardSummaryDto> {
+        const workspaceIds = await this.getUserWorkspaceIds(userId);
+
         // Get user's preferred currency
         const user = await this.prisma.user.findUnique({
             where: { id: userId },
@@ -19,7 +33,7 @@ export class DashboardService {
         });
 
         if (!user) {
-            throw new Error('User not found');
+            throw new NotFoundException('Usuario no encontrado');
         }
 
         const preferredCurrency = user.preferredCurrency;
@@ -29,7 +43,7 @@ export class DashboardService {
 
         // Calculate total balance from all bank accounts
         const bankAccounts = await this.prisma.bankAccount.findMany({
-            where: { userId },
+            where: { workspaceId: { in: workspaceIds } },
             select: { currentBalance: true, currency: true },
         });
 
@@ -54,7 +68,7 @@ export class DashboardService {
 
         const transactions = await this.prisma.transaction.findMany({
             where: {
-                userId,
+                workspaceId: { in: workspaceIds },
                 date: {
                     gte: startOfMonth,
                     lte: endOfMonth,
@@ -87,7 +101,7 @@ export class DashboardService {
 
         // Calculate budget remaining
         const budgetRemaining = await this.calculateBudgetRemaining(
-            userId,
+            workspaceIds,
             currentMonth,
             currentYear,
             preferredCurrency,
@@ -96,7 +110,7 @@ export class DashboardService {
 
         // Calculate money available (balance - savings)
         const savings = await this.prisma.saving.findMany({
-            where: { userId },
+            where: { workspaceId: { in: workspaceIds } },
             select: { amount: true, currency: true },
         });
 
@@ -123,7 +137,7 @@ export class DashboardService {
 
         const previousTransactions = await this.prisma.transaction.findMany({
             where: {
-                userId,
+                workspaceId: { in: workspaceIds },
                 date: {
                     gte: startOfPreviousMonth,
                     lte: endOfPreviousMonth,
@@ -179,31 +193,9 @@ export class DashboardService {
         userId: string,
         limit: number = 10,
     ): Promise<RecentTransactionDto[]> {
-        // Get personal transactions
-        const personalTransactions = await this.prisma.transaction.findMany({
-            where: {
-                userId,
-                workspaceId: null,
-            },
-            include: {
-                category: true,
-                user: true,
-                workspace: true,
-                paidByMember: true,
-            },
-            orderBy: { date: 'desc' },
-            take: limit,
-        });
+        const workspaceIds = await this.getUserWorkspaceIds(userId);
 
-        // Get workspace transactions where user is a member
-        const workspaceMemberships = await this.prisma.workspaceMember.findMany({
-            where: { userId },
-            select: { workspaceId: true },
-        });
-
-        const workspaceIds = workspaceMemberships.map((m) => m.workspaceId);
-
-        const workspaceTransactions = await this.prisma.transaction.findMany({
+        const allTransactions = await this.prisma.transaction.findMany({
             where: {
                 workspaceId: { in: workspaceIds },
             },
@@ -217,17 +209,12 @@ export class DashboardService {
             take: limit,
         });
 
-        // Merge and sort
-        const allTransactions = [...personalTransactions, ...workspaceTransactions]
-            .sort((a, b) => b.date.getTime() - a.date.getTime())
-            .slice(0, limit);
-
         return allTransactions.map((tx) => ({
             id: tx.id,
             amount: parseFloat(tx.amount.toString()),
             currency: tx.currency,
             date: tx.date,
-            description: tx.description,
+            description: tx.description ? this.encryption.decrypt(tx.description) : null,
             type: tx.type,
             category: {
                 name: tx.category.name,
@@ -236,7 +223,7 @@ export class DashboardService {
             },
             payer: tx.paidByMember
                 ? tx.paidByMember.nameAlias
-                : `${tx.user.name} ${tx.user.lastName}`,
+                : tx.user ? `${tx.user.name} ${tx.user.lastName}` : 'Desconocido',
             paymentMethod: tx.paymentMethod,
             workspace: tx.workspace ? tx.workspace.name : null,
         }));
@@ -247,19 +234,19 @@ export class DashboardService {
         from: Date,
         to: Date,
     ): Promise<DueEventDto[]> {
+        const workspaceIds = await this.getUserWorkspaceIds(userId);
         const events: DueEventDto[] = [];
 
-        // Get user's cards
+        // Get user's cards via workspace-linked bank accounts
         const cards = await this.prisma.card.findMany({
             where: {
-                linkedBankAccount: {
-                    userId,
-                },
+                linkedBankAccount: { workspaceId: { in: workspaceIds } },
             },
         });
 
         // Add card due dates
         for (const card of cards) {
+            const cardName = this.encryption.decrypt(card.name);
             const currentDate = new Date(from);
             while (currentDate <= to) {
                 const statementCloseDate = new Date(
@@ -277,7 +264,7 @@ export class DashboardService {
                     events.push({
                         id: `card-close-${card.id}-${statementCloseDate.getTime()}`,
                         date: statementCloseDate,
-                        description: `Cierre de ${card.name}`,
+                        description: `Cierre de ${cardName}`,
                         amount: null,
                         type: 'CARD_STATEMENT_CLOSE',
                         currency: null,
@@ -288,7 +275,7 @@ export class DashboardService {
                     events.push({
                         id: `card-due-${card.id}-${dueDate.getTime()}`,
                         date: dueDate,
-                        description: `Vencimiento de ${card.name}`,
+                        description: `Vencimiento de ${cardName}`,
                         amount: null,
                         type: 'CARD_DUE',
                         currency: null,
@@ -299,10 +286,10 @@ export class DashboardService {
             }
         }
 
-        // Get recurrent transactions
+        // Get recurrent transactions across all workspaces
         const recurrentTransactions = await this.prisma.transaction.findMany({
             where: {
-                userId,
+                workspaceId: { in: workspaceIds },
                 isRecurrent: true,
             },
             include: {
@@ -327,7 +314,9 @@ export class DashboardService {
                             events.push({
                                 id: `recurrent-${tx.id}-${nextOccurrence.getTime()}`,
                                 date: nextOccurrence,
-                                description: tx.description || tx.category.name,
+                                description: tx.description
+                                    ? this.encryption.decrypt(tx.description)
+                                    : tx.category.name,
                                 amount: parseFloat(tx.amount.toString()),
                                 type: 'RECURRENT_TRANSACTION',
                                 currency: tx.currency,
@@ -345,8 +334,10 @@ export class DashboardService {
     }
 
     async getAccounts(userId: string): Promise<AccountWithCardsDto[]> {
+        const workspaceIds = await this.getUserWorkspaceIds(userId);
+
         const accounts = await this.prisma.bankAccount.findMany({
-            where: { userId },
+            where: { workspaceId: { in: workspaceIds } },
             include: {
                 cards: true,
             },
@@ -355,13 +346,13 @@ export class DashboardService {
 
         return accounts.map((account) => ({
             id: account.id,
-            name: account.name,
+            name: this.encryption.decrypt(account.name),
             type: account.type,
             currency: account.currency,
             currentBalance: parseFloat(account.currentBalance.toString()),
             cards: account.cards.map((card) => ({
                 id: card.id,
-                name: card.name,
+                name: this.encryption.decrypt(card.name),
                 type: card.type,
                 statementCloseDay: card.statementCloseDay,
                 dueDay: card.dueDay,
@@ -407,7 +398,7 @@ export class DashboardService {
     }
 
     private async calculateBudgetRemaining(
-        userId: string,
+        workspaceIds: string[],
         month: number,
         year: number,
         currency: string,
@@ -415,7 +406,7 @@ export class DashboardService {
     ): Promise<number> {
         const budget = await this.prisma.budget.findFirst({
             where: {
-                userId,
+                workspaceId: { in: workspaceIds },
                 month,
                 year,
                 type: 'GENERAL',
