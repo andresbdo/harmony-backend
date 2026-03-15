@@ -1,4 +1,4 @@
-import { IsNumber, IsString, IsEnum, IsOptional, IsDateString, IsBoolean, IsObject, ValidateIf } from 'class-validator';
+import { IsNumber, IsString, IsEnum, IsOptional, IsDateString, IsBoolean, IsObject, ValidateIf, IsNotEmpty } from 'class-validator';
 
 export enum TransactionType {
     INCOME = 'INCOME',
@@ -44,8 +44,8 @@ export class CreateTransactionDto {
     cardId?: string;
 
     @IsString()
-    @IsOptional()
-    workspaceId?: string;
+    @IsNotEmpty()
+    workspaceId: string;
 
     @IsString()
     @IsOptional()

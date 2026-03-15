@@ -1,10 +1,20 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateTransactionDto, UpdateTransactionDto, PaymentMethod } from './dto/transaction.dto';
+import { EncryptionService } from 'src/common/encryption/encryption.service';
 
 @Injectable()
 export class TransactionsService {
-    constructor(private prisma: PrismaService) { }
+    constructor(
+        private prisma: PrismaService,
+        private encryption: EncryptionService,
+    ) { }
+
+    private decryptTx(tx: any) {
+        return tx.description
+            ? { ...tx, description: this.encryption.decrypt(tx.description) }
+            : tx;
+    }
 
     private async validatePaymentMethod(dto: CreateTransactionDto | UpdateTransactionDto) {
         if (dto.paymentMethod === PaymentMethod.CARD && !dto.cardId) {
@@ -41,52 +51,49 @@ export class TransactionsService {
         });
     }
 
-    async create(userId: string, createTransactionDto: CreateTransactionDto) {
-        await this.validatePaymentMethod(createTransactionDto);
+    async create(workspaceId: string, dto: CreateTransactionDto) {
+        await this.validatePaymentMethod(dto);
 
         const transaction = await this.prisma.transaction.create({
             data: {
-                amount: createTransactionDto.amount,
-                currency: createTransactionDto.currency,
-                date: new Date(createTransactionDto.date),
-                description: createTransactionDto.description,
-                type: createTransactionDto.type,
-                categoryId: createTransactionDto.categoryId,
-                userId: userId,
-                workspaceId: createTransactionDto.workspaceId,
-                paidByMemberId: createTransactionDto.paidByMemberId,
-                paymentMethod: createTransactionDto.paymentMethod,
-                bankAccountId: createTransactionDto.bankAccountId,
-                cardId: createTransactionDto.cardId,
-                isRecurrent: createTransactionDto.isRecurrent || false,
-                recurrenceRule: createTransactionDto.recurrenceRule,
+                amount: dto.amount,
+                currency: dto.currency,
+                date: new Date(dto.date),
+                description: dto.description ? this.encryption.encrypt(dto.description) : null,
+                type: dto.type,
+                categoryId: dto.categoryId,
+                workspaceId,
+                paidByMemberId: dto.paidByMemberId,
+                paymentMethod: dto.paymentMethod,
+                bankAccountId: dto.bankAccountId,
+                cardId: dto.cardId,
+                isRecurrent: dto.isRecurrent || false,
+                recurrenceRule: dto.recurrenceRule,
             },
         });
 
-        if (createTransactionDto.bankAccountId) {
-            await this.recalculateBalance(createTransactionDto.bankAccountId);
+        if (dto.bankAccountId) {
+            await this.recalculateBalance(dto.bankAccountId);
         }
 
-        return transaction;
+        return this.decryptTx(transaction);
     }
 
-    async findAll(userId: string, filters: { workspaceId?: string; categoryId?: string; type?: string }) {
-        return this.prisma.transaction.findMany({
-            where: {
-                userId,
-                ...filters,
-            },
+    async findAll(workspaceId: string, filters: any) {
+        const transactions = await this.prisma.transaction.findMany({
+            where: { workspaceId, ...filters },
             include: {
                 category: true,
                 workspace: true,
             },
             orderBy: { date: 'desc' },
         });
+        return transactions.map(this.decryptTx.bind(this));
     }
 
-    async findOne(id: string, userId: string) {
-        const transaction = await this.prisma.transaction.findFirst({
-            where: { id, userId },
+    async findOne(id: string, workspaceId: string) {
+        const tx = await this.prisma.transaction.findFirst({
+            where: { id, workspaceId },
             include: {
                 category: true,
                 workspace: true,
@@ -95,21 +102,24 @@ export class TransactionsService {
             },
         });
 
-        if (!transaction) {
-            throw new NotFoundException(`Transaction with ID ${id} not found`);
+        if (!tx) {
+            throw new NotFoundException(`Transacción no encontrada`);
         }
 
-        return transaction;
+        return this.decryptTx(tx);
     }
 
-    async update(id: string, userId: string, updateTransactionDto: UpdateTransactionDto) {
-        const existing = await this.findOne(id, userId);
+    async update(id: string, workspaceId: string, updateTransactionDto: UpdateTransactionDto) {
+        const existing = await this.findOne(id, workspaceId);
         await this.validatePaymentMethod(updateTransactionDto);
 
         const updated = await this.prisma.transaction.update({
             where: { id },
             data: {
                 ...updateTransactionDto,
+                description: updateTransactionDto.description
+                    ? this.encryption.encrypt(updateTransactionDto.description)
+                    : undefined,
                 date: updateTransactionDto.date ? new Date(updateTransactionDto.date) : undefined,
             },
         });
@@ -121,11 +131,11 @@ export class TransactionsService {
             await this.recalculateBalance(accountId);
         }
 
-        return updated;
+        return this.decryptTx(updated);
     }
 
-    async remove(id: string, userId: string) {
-        const transaction = await this.findOne(id, userId);
+    async remove(id: string, workspaceId: string) {
+        const transaction = await this.findOne(id, workspaceId);
         await this.prisma.transaction.delete({ where: { id } });
         if (transaction.bankAccountId) {
             await this.recalculateBalance(transaction.bankAccountId);

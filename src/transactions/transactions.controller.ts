@@ -20,40 +20,27 @@ export class TransactionsController {
     constructor(private readonly transactionsService: TransactionsService) { }
 
     @Post()
-    create(@Request() req, @Body() createTransactionDto: CreateTransactionDto) {
-        return this.transactionsService.create(req.user.id, createTransactionDto);
+    create(@Request() req, @Body() dto: CreateTransactionDto) {
+        return this.transactionsService.create(req.workspaceId, dto);
     }
 
     @Get()
-    findAll(
-        @Request() req,
-        @Query('workspaceId') workspaceId?: string,
-        @Query('categoryId') categoryId?: string,
-        @Query('type') type?: string,
-    ) {
-        return this.transactionsService.findAll(req.user.id, {
-            workspaceId,
-            categoryId,
-            type,
-        });
+    findAll(@Request() req, @Query() filters: any) {
+        return this.transactionsService.findAll(req.workspaceId, filters);
     }
 
     @Get(':id')
     findOne(@Request() req, @Param('id') id: string) {
-        return this.transactionsService.findOne(id, req.user.id);
+        return this.transactionsService.findOne(id, req.workspaceId);
     }
 
     @Patch(':id')
-    update(
-        @Request() req,
-        @Param('id') id: string,
-        @Body() updateTransactionDto: UpdateTransactionDto,
-    ) {
-        return this.transactionsService.update(id, req.user.id, updateTransactionDto);
+    update(@Request() req, @Param('id') id: string, @Body() dto: UpdateTransactionDto) {
+        return this.transactionsService.update(id, req.workspaceId, dto);
     }
 
     @Delete(':id')
     remove(@Request() req, @Param('id') id: string) {
-        return this.transactionsService.remove(id, req.user.id);
+        return this.transactionsService.remove(id, req.workspaceId);
     }
 }
