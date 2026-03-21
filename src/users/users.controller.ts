@@ -1,19 +1,19 @@
-import { Controller, Delete, Get, Param, UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { Controller, Delete, ForbiddenException, Get, Param, Request } from '@nestjs/common';
 import { UsersService } from './users.service';
 
-@UseGuards(JwtAuthGuard)
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) { }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id') id: string, @Request() req) {
+    if (req.user.id !== id) throw new ForbiddenException();
     return this.usersService.findOnePublic({ id });
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
+  remove(@Param('id') id: string, @Request() req) {
+    if (req.user.id !== id) throw new ForbiddenException();
     return this.usersService.remove({ id });
   }
 }

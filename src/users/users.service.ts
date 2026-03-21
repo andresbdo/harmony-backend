@@ -33,31 +33,20 @@ export class UsersService {
     });
   }
 
-  findOnePublic(findUserDto: FindUserDto) {
-    const query = findUserDto.id && !findUserDto.email ? {
-      id: findUserDto.id,
-    } : {
-      email: findUserDto.email,
-    };
-    return this.prisma.user.findUnique({
-      where: query,
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        lastName: true,
-        preferredCurrency: true,
-        createdAt: true,
-      },
-    });
+  async findOnePublic(findUserDto: FindUserDto) {
+    const user = await this.findOne(findUserDto);
+    if (!user) return null;
+    const { password, ...rest } = user;
+    return rest;
   }
 
-  remove(removeUserDto: RemoveUserDto) {
-    return this.prisma.user.delete({
+  async remove(removeUserDto: RemoveUserDto) {
+    await this.prisma.user.delete({
       where: {
         id: removeUserDto.id,
       }
     });
+    return { deleted: true };
   }
 
   async findMe(userId: string) {
