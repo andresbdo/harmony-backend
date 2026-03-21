@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsEnum, IsOptional, IsNotEmpty } from 'class-validator';
+import { IsString, IsNumber, IsEnum, IsOptional, IsNotEmpty, IsIn } from 'class-validator';
 
 export class CreateBankAccountDto {
     @IsString()
@@ -16,6 +16,11 @@ export class CreateBankAccountDto {
     @IsString()
     @IsNotEmpty()
     workspaceId: string;
+
+    @IsOptional()
+    @IsString()
+    @IsIn(['SAVINGS', 'CHECKING'])
+    subtype?: string;
 }
 
 export class UpdateBankAccountDto extends CreateBankAccountDto { }

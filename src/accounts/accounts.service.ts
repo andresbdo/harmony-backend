@@ -24,6 +24,7 @@ export class AccountsService {
         workspaceId,
         name: this.encryption.encrypt(dto.name),
         type: dto.type,
+        subtype: dto.subtype ?? null,
         currency: dto.currency,
         initialBalance: dto.initialBalance,
         currentBalance: dto.initialBalance,

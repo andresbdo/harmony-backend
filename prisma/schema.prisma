@@ -78,6 +78,7 @@ model BankAccount {
   workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   name           String
   type           String
+  subtype        String?   // "SAVINGS" | "CHECKING" | null
   currency       String
   currentBalance Decimal
   initialBalance Decimal
