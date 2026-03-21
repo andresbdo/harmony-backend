@@ -9,21 +9,46 @@ export class UsersService {
   constructor(private prisma: PrismaService) { }
 
   create(createUserDto: CreateUserDto) {
-    const user = this.prisma.user.create({
+    return this.prisma.user.create({
       data: createUserDto,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        lastName: true,
+        preferredCurrency: true,
+        createdAt: true,
+      },
     });
-    return user;
   }
 
   findOne(findUserDto: FindUserDto) {
-
     const query = findUserDto.id && !findUserDto.email ? {
       id: findUserDto.id,
     } : {
       email: findUserDto.email,
-    }
+    };
     return this.prisma.user.findUnique({
-      where: query
+      where: query,
+    });
+  }
+
+  findOnePublic(findUserDto: FindUserDto) {
+    const query = findUserDto.id && !findUserDto.email ? {
+      id: findUserDto.id,
+    } : {
+      email: findUserDto.email,
+    };
+    return this.prisma.user.findUnique({
+      where: query,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        lastName: true,
+        preferredCurrency: true,
+        createdAt: true,
+      },
     });
   }
 
