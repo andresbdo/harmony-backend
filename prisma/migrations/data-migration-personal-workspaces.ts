@@ -3,6 +3,13 @@ import { randomBytes } from 'crypto';
 
 const prisma = new PrismaClient();
 
+/**
+ * One-time data migration: creates personal workspaces for existing users
+ * and backfills workspaceId on orphaned records.
+ *
+ * Uses raw SQL for null checks since workspaceId is now required in the schema
+ * but legacy data may still have NULLs in the database.
+ */
 async function main() {
   console.log('Iniciando data migration: workspaces personales...');
 
@@ -13,7 +20,6 @@ async function main() {
   console.log(`Procesando ${users.length} usuarios...`);
 
   for (const user of users) {
-    // 1. Verificar si ya tiene workspace personal
     const existingPersonal = await prisma.workspace.findFirst({
       where: { ownerId: user.id, isPersonal: true },
     });
@@ -24,7 +30,6 @@ async function main() {
       personalWorkspaceId = existingPersonal.id;
       console.log(`  [SKIP] Usuario ${user.email} ya tiene workspace personal`);
     } else {
-      // 2. Crear workspace personal
       const personalWorkspace = await prisma.workspace.create({
         data: {
           name: 'Personal',
@@ -46,53 +51,38 @@ async function main() {
       console.log(`  [OK] Workspace personal creado para ${user.email}: ${personalWorkspaceId}`);
     }
 
-    // 3. Backfill BankAccount
-    const accountsUpdated = await prisma.bankAccount.updateMany({
-      where: { userId: user.id, workspaceId: null },
-      data: { workspaceId: personalWorkspaceId },
-    });
-    console.log(`    BankAccounts actualizadas: ${accountsUpdated.count}`);
-
-    // 4. Backfill Budget
-    const budgetsUpdated = await prisma.budget.updateMany({
-      where: { userId: user.id, workspaceId: null },
-      data: { workspaceId: personalWorkspaceId },
-    });
-    console.log(`    Budgets actualizados: ${budgetsUpdated.count}`);
-
-    // 5. Backfill Saving
-    const savingsUpdated = await prisma.saving.updateMany({
-      where: { userId: user.id, workspaceId: null },
-      data: { workspaceId: personalWorkspaceId },
-    });
-    console.log(`    Savings actualizados: ${savingsUpdated.count}`);
-
-    // 6. Backfill Transaction (las personales: workspaceId === null)
-    const txUpdated = await prisma.transaction.updateMany({
-      where: { userId: user.id, workspaceId: null },
-      data: { workspaceId: personalWorkspaceId },
-    });
-    console.log(`    Transactions actualizadas: ${txUpdated.count}`);
+    // Backfill using raw SQL (workspaceId is required in schema but may be NULL in DB)
+    const tables = ['BankAccount', 'Budget', 'Saving', 'Transaction'];
+    for (const table of tables) {
+      const result = await prisma.$executeRawUnsafe(
+        `UPDATE "${table}" SET "workspaceId" = $1 WHERE "workspaceId" IS NULL`,
+        personalWorkspaceId,
+      );
+      console.log(`    ${table} actualizadas: ${result}`);
+    }
   }
 
-  // 7. Verificar que no quedaron registros sin workspaceId
-  const orphanAccounts = await prisma.bankAccount.count({ where: { workspaceId: null } });
-  const orphanBudgets = await prisma.budget.count({ where: { workspaceId: null } });
-  const orphanSavings = await prisma.saving.count({ where: { workspaceId: null } });
-  const orphanTx = await prisma.transaction.count({ where: { workspaceId: null } });
+  // Verify no orphans remain
+  const orphans = await prisma.$queryRaw<{ total: bigint }[]>`
+    SELECT (
+      (SELECT COUNT(*) FROM "BankAccount" WHERE "workspaceId" IS NULL) +
+      (SELECT COUNT(*) FROM "Budget" WHERE "workspaceId" IS NULL) +
+      (SELECT COUNT(*) FROM "Saving" WHERE "workspaceId" IS NULL) +
+      (SELECT COUNT(*) FROM "Transaction" WHERE "workspaceId" IS NULL)
+    ) as total
+  `;
 
-  if (orphanAccounts + orphanBudgets + orphanSavings + orphanTx > 0) {
-    throw new Error(
-      `❌ Quedan registros sin workspaceId: accounts=${orphanAccounts}, budgets=${orphanBudgets}, savings=${orphanSavings}, tx=${orphanTx}`,
-    );
+  const total = Number(orphans[0]?.total ?? 0);
+  if (total > 0) {
+    throw new Error(`Quedan ${total} registros sin workspaceId`);
   }
 
-  console.log('✅ Data migration completada exitosamente.');
+  console.log('Data migration completada exitosamente.');
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Error en data migration:', e);
+    console.error('Error en data migration:', e);
     process.exit(1);
   })
   .finally(() => prisma.$disconnect());

@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { hash } from 'bcrypt';
+import { randomBytes } from 'crypto';
 
 const prisma = new PrismaClient();
 
@@ -91,10 +92,34 @@ async function main() {
 
         console.log('✅ Dev user created:', devEmail);
 
+        // Create personal workspace for dev user
+        const personalWorkspace = await prisma.workspace.upsert({
+            where: { id: `personal-${devUser.id}` },
+            update: {},
+            create: {
+                id: `personal-${devUser.id}`,
+                name: 'Personal',
+                isPersonal: true,
+                ownerId: devUser.id,
+                cutoffDay: 1,
+                inviteToken: randomBytes(16).toString('hex'),
+                members: {
+                    create: {
+                        userId: devUser.id,
+                        email: devEmail,
+                        nameAlias: 'Dev',
+                        responsibilityPercentage: 100,
+                    },
+                },
+            },
+        });
+
+        console.log('✅ Personal workspace created');
+
         // Create sample bank account
         const bankAccount = await prisma.bankAccount.create({
             data: {
-                userId: devUser.id,
+                workspaceId: personalWorkspace.id,
                 name: 'Cuenta Principal',
                 type: 'BANK',
                 currency: 'ARS',
@@ -124,7 +149,7 @@ async function main() {
         const currentDate = new Date();
         await prisma.budget.create({
             data: {
-                userId: devUser.id,
+                workspaceId: personalWorkspace.id,
                 amount: 100000,
                 currency: 'ARS',
                 type: 'GENERAL',
@@ -138,7 +163,7 @@ async function main() {
         // Create sample saving
         await prisma.saving.create({
             data: {
-                userId: devUser.id,
+                workspaceId: personalWorkspace.id,
                 amount: 50000,
                 currency: 'ARS',
                 description: 'Ahorro para emergencias',
@@ -167,6 +192,7 @@ async function main() {
                     type: 'INCOME',
                     categoryId: incomeCategory.id,
                     userId: devUser.id,
+                    workspaceId: personalWorkspace.id,
                     paymentMethod: 'BANK_ACCOUNT',
                     bankAccountId: bankAccount.id,
                 },
@@ -190,6 +216,7 @@ async function main() {
                         type: 'EXPENSE',
                         categoryId: expenseCategory.id,
                         userId: devUser.id,
+                        workspaceId: personalWorkspace.id,
                         paymentMethod: 'BANK_ACCOUNT',
                         bankAccountId: bankAccount.id,
                     },
