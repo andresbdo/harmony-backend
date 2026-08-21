@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { EncryptionService } from 'src/common/encryption/encryption.service';
 import { CreateBankAccountDto, UpdateBankAccountDto, CreateCardDto, UpdateCardDto } from './dto/account.dto';
@@ -18,7 +18,16 @@ export class AccountsService {
     return { ...card, name: this.encryption.decrypt(card.name) };
   }
 
-  async createAccount(workspaceId: string, dto: CreateBankAccountDto) {
+  async createAccount(workspaceId: string, userId: string, dto: CreateBankAccountDto) {
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { isPersonal: true, ownerId: true },
+    });
+
+    if (!workspace || !workspace.isPersonal || workspace.ownerId !== userId) {
+      throw new ForbiddenException('Bank accounts can only be created in your personal workspace');
+    }
+
     const account = await this.prisma.bankAccount.create({
       data: {
         workspaceId,
@@ -33,9 +42,9 @@ export class AccountsService {
     return this.decryptAccount(account);
   }
 
-  async findAllAccounts(workspaceId: string) {
+  async findAllAccounts(workspaceId: string, userId: string) {
     const accounts = await this.prisma.bankAccount.findMany({
-      where: { workspaceId },
+      where: { workspaceId, workspace: { isPersonal: true, ownerId: userId } },
       include: { cards: true },
       orderBy: { name: 'asc' },
     });

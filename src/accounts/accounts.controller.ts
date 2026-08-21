@@ -23,15 +23,14 @@ import { WorkspaceMemberGuard } from 'src/workspaces/workspace-member.guard';
 export class AccountsController {
     constructor(private readonly accountsService: AccountsService) { }
 
-    // Bank Accounts
     @Post()
     createAccount(@Request() req, @Body() dto: CreateBankAccountDto) {
-        return this.accountsService.createAccount(req.workspaceId, dto);
+        return this.accountsService.createAccount(req.workspaceId, req.user.id, dto);
     }
 
     @Get()
     findAllAccounts(@Request() req) {
-        return this.accountsService.findAllAccounts(req.workspaceId);
+        return this.accountsService.findAllAccounts(req.workspaceId, req.user.id);
     }
 
     @Get(':id')
@@ -49,7 +48,6 @@ export class AccountsController {
         return this.accountsService.removeAccount(id, req.workspaceId);
     }
 
-    // Cards
     @Post('cards')
     createCard(@Request() req, @Body() dto: CreateCardDto) {
         return this.accountsService.createCard(req.workspaceId, dto);
