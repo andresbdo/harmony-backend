@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { BudgetsService } from './budgets.service';
 import { CreateBudgetDto, UpdateBudgetDto, CreateSavingDto, UpdateSavingDto } from './dto/budget.dto';
-import { WorkspaceMemberGuard } from 'src/workspaces/workspace-member.guard';
+import { WorkspaceMemberGuard } from '../workspaces/workspace-member.guard';
 
 @Controller('budgets')
 @UseGuards(WorkspaceMemberGuard)

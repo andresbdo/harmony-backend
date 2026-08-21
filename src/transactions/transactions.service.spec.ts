@@ -1,10 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { TransactionsService } from './transactions.service';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { EncryptionService } from 'src/common/encryption/encryption.service';
-import { NotificationsService } from 'src/notifications/notifications.service';
-import { BudgetsService } from 'src/budgets/budgets.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { EncryptionService } from '../common/encryption/encryption.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { BudgetsService } from '../budgets/budgets.service';
 
 const makeTx = (overrides = {}) => ({
     id: 'tx-1',

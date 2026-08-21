@@ -16,7 +16,7 @@ import {
     CreateCardDto,
     UpdateCardDto,
 } from './dto/account.dto';
-import { WorkspaceMemberGuard } from 'src/workspaces/workspace-member.guard';
+import { WorkspaceMemberGuard } from '../workspaces/workspace-member.guard';
 
 @Controller('accounts')
 @UseGuards(WorkspaceMemberGuard)

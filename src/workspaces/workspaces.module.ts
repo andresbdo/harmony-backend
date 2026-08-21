@@ -3,7 +3,7 @@ import { WorkspacesService } from './workspaces.service';
 import { WorkspacesController } from './workspaces.controller';
 import { WorkspaceMemberGuard } from './workspace-member.guard';
 import { WorkspacesScheduler } from './workspaces.scheduler';
-import { PrismaModule } from 'src/prisma/prisma.module';
+import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
     imports: [PrismaModule],

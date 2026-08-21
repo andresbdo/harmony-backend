@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DashboardService } from './dashboard.service';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { EncryptionService } from 'src/common/encryption/encryption.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { EncryptionService } from '../common/encryption/encryption.service';
 
 const now = new Date();
 const month = now.getMonth() + 1;

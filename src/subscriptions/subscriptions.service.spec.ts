@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { SubscriptionsScheduler } from './subscriptions.scheduler';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { NotificationsService } from 'src/notifications/notifications.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const today = new Date();
 today.setHours(0, 0, 0, 0);

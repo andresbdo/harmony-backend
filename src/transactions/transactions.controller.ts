@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { TransactionsService } from './transactions.service';
 import { AssignPaymentMethodDto, CreateTransactionDto, UpdateTransactionDto } from './dto/transaction.dto';
-import { WorkspaceMemberGuard } from 'src/workspaces/workspace-member.guard';
+import { WorkspaceMemberGuard } from '../workspaces/workspace-member.guard';
 
 @Controller('transactions')
 @UseGuards(WorkspaceMemberGuard)

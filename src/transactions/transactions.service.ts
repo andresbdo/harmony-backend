@@ -1,9 +1,9 @@
 import { Injectable, BadRequestException, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { CreateTransactionDto, UpdateTransactionDto, PaymentMethod } from './dto/transaction.dto';
-import { EncryptionService } from 'src/common/encryption/encryption.service';
-import { NotificationsService } from 'src/notifications/notifications.service';
-import { BudgetsService } from 'src/budgets/budgets.service';
+import { EncryptionService } from '../common/encryption/encryption.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { BudgetsService } from '../budgets/budgets.service';
 
 @Injectable()
 export class TransactionsService {

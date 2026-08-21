@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { EncryptionService } from 'src/common/encryption/encryption.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { EncryptionService } from '../common/encryption/encryption.service';
 import {
     DashboardSummaryDto,
     RecentTransactionDto,

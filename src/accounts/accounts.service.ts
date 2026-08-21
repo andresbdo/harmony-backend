@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { EncryptionService } from 'src/common/encryption/encryption.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { EncryptionService } from '../common/encryption/encryption.service';
 import { CreateBankAccountDto, UpdateBankAccountDto, CreateCardDto, UpdateCardDto } from './dto/account.dto';
 
 @Injectable()

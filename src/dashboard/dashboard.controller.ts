@@ -1,6 +1,6 @@
 import { Controller, Get, Query, UseGuards, Request } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
-import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
     DashboardSummaryDto,
     RecentTransactionDto,
