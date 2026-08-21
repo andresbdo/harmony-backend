@@ -4,8 +4,8 @@ export class DashboardSummaryDto {
     moneyAvailable: number;
     monthlyIncome: number;
     monthlyExpenses: number;
-    incomeTrend: number; // percentage vs previous month
-    expenseTrend: number; // percentage vs previous month
+    incomeTrend: number;
+    expenseTrend: number;
 }
 
 export class RecentTransactionDto {
@@ -20,9 +20,9 @@ export class RecentTransactionDto {
         color: string;
         icon: string;
     };
-    payer: string; // name of who paid
-    paymentMethod: string;
-    workspace: string | null; // workspace name if applicable
+    payer: string;
+    paymentMethod: string | null;
+    workspace: { name: string; color: string } | null;
 }
 
 export class DueEventDto {
@@ -47,4 +47,13 @@ export class AccountWithCardsDto {
         statementCloseDay: number;
         dueDay: number;
     }[];
+}
+
+export class CalendarEvent {
+    date: string;
+    type: string;
+    title: string;
+    color: string;
+    amount?: number;
+    currency?: string;
 }

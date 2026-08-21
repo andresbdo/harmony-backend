@@ -6,6 +6,7 @@ import {
     RecentTransactionDto,
     DueEventDto,
     AccountWithCardsDto,
+    CalendarEvent,
 } from './dto/dashboard.dto';
 
 @Controller('dashboard')
@@ -14,8 +15,11 @@ export class DashboardController {
     constructor(private readonly dashboardService: DashboardService) { }
 
     @Get('summary')
-    async getSummary(@Request() req): Promise<DashboardSummaryDto> {
-        return this.dashboardService.getSummary(req.user.id);
+    async getSummary(
+        @Request() req,
+        @Query('workspaceId') workspaceId?: string,
+    ): Promise<DashboardSummaryDto> {
+        return this.dashboardService.getSummary(req.user.id, workspaceId);
     }
 
     @Get('recent-transactions')
@@ -44,5 +48,25 @@ export class DashboardController {
     @Get('accounts')
     async getAccounts(@Request() req): Promise<AccountWithCardsDto[]> {
         return this.dashboardService.getAccounts(req.user.id);
+    }
+
+    @Get('calendar')
+    async getCalendarEvents(
+        @Request() req,
+        @Query('month') month?: string,
+        @Query('year') year?: string,
+        @Query('workspaceId') workspaceId?: string,
+    ): Promise<CalendarEvent[]> {
+        const now = new Date();
+        const parsedMonth = month ? parseInt(month, 10) : now.getMonth() + 1;
+        const parsedYear = year ? parseInt(year, 10) : now.getFullYear();
+        const parsedWorkspaceId = workspaceId || null;
+
+        return this.dashboardService.getCalendarEvents(
+            req.user.id,
+            parsedWorkspaceId,
+            parsedMonth,
+            parsedYear,
+        );
     }
 }

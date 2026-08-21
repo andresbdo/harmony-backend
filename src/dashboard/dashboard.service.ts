@@ -6,6 +6,7 @@ import {
     RecentTransactionDto,
     DueEventDto,
     AccountWithCardsDto,
+    CalendarEvent,
 } from './dto/dashboard.dto';
 
 @Injectable()
@@ -23,10 +24,12 @@ export class DashboardService {
         return memberships.map(m => m.workspaceId);
     }
 
-    async getSummary(userId: string): Promise<DashboardSummaryDto> {
-        const workspaceIds = await this.getUserWorkspaceIds(userId);
+    async getSummary(userId: string, workspaceId?: string): Promise<DashboardSummaryDto> {
+        const allWorkspaceIds = await this.getUserWorkspaceIds(userId);
+        const workspaceIds = workspaceId && allWorkspaceIds.includes(workspaceId)
+            ? [workspaceId]
+            : allWorkspaceIds;
 
-        // Get user's preferred currency
         const user = await this.prisma.user.findUnique({
             where: { id: userId },
             select: { preferredCurrency: true },
@@ -41,7 +44,6 @@ export class DashboardService {
         const currentMonth = currentDate.getMonth() + 1;
         const currentYear = currentDate.getFullYear();
 
-        // Calculate total balance from all bank accounts
         const bankAccounts = await this.prisma.bankAccount.findMany({
             where: { workspaceId: { in: workspaceIds } },
             select: { currentBalance: true, currency: true },
@@ -62,16 +64,15 @@ export class DashboardService {
             }),
         );
 
-        // Calculate monthly income and expenses
-        const startOfMonth = new Date(currentYear, currentMonth - 1, 1);
-        const endOfMonth = new Date(currentYear, currentMonth, 0, 23, 59, 59);
+        const startOfMonth = new Date(Date.UTC(currentYear, currentMonth - 1, 1, 3, 0, 0));
+        const startOfNextMonth = new Date(Date.UTC(currentYear, currentMonth, 1, 3, 0, 0));
 
         const transactions = await this.prisma.transaction.findMany({
             where: {
                 workspaceId: { in: workspaceIds },
                 date: {
                     gte: startOfMonth,
-                    lte: endOfMonth,
+                    lt: startOfNextMonth,
                 },
             },
             select: {
@@ -99,7 +100,6 @@ export class DashboardService {
             }
         }
 
-        // Calculate budget remaining
         const budgetRemaining = await this.calculateBudgetRemaining(
             workspaceIds,
             currentMonth,
@@ -108,16 +108,15 @@ export class DashboardService {
             monthlyExpenses,
         );
 
-        // Calculate money available (balance - savings)
         const savings = await this.prisma.saving.findMany({
             where: { workspaceId: { in: workspaceIds } },
-            select: { amount: true, currency: true },
+            select: { targetAmount: true, currency: true },
         });
 
         let totalSavings = 0;
         for (const saving of savings) {
             const convertedAmount = await this.convertCurrency(
-                parseFloat(saving.amount.toString()),
+                parseFloat(saving.targetAmount.toString()),
                 saving.currency,
                 preferredCurrency,
                 currentDate,
@@ -128,19 +127,17 @@ export class DashboardService {
         const totalBalanceAmount = totalBalance.reduce((sum, b) => sum + b.amount, 0);
         const moneyAvailable = totalBalanceAmount - totalSavings;
 
-        // Calculate trends (vs previous month)
         const previousMonth = currentMonth === 1 ? 12 : currentMonth - 1;
         const previousYear = currentMonth === 1 ? currentYear - 1 : currentYear;
 
-        const startOfPreviousMonth = new Date(previousYear, previousMonth - 1, 1);
-        const endOfPreviousMonth = new Date(previousYear, previousMonth, 0, 23, 59, 59);
+        const startOfPreviousMonth = new Date(Date.UTC(previousYear, previousMonth - 1, 1, 3, 0, 0));
 
         const previousTransactions = await this.prisma.transaction.findMany({
             where: {
                 workspaceId: { in: workspaceIds },
                 date: {
                     gte: startOfPreviousMonth,
-                    lte: endOfPreviousMonth,
+                    lt: startOfMonth,
                 },
             },
             select: {
@@ -225,7 +222,7 @@ export class DashboardService {
                 ? tx.paidByMember.nameAlias
                 : tx.user ? `${tx.user.name} ${tx.user.lastName}` : 'Desconocido',
             paymentMethod: tx.paymentMethod,
-            workspace: tx.workspace ? tx.workspace.name : null,
+            workspace: tx.workspace ? { name: tx.workspace.name, color: tx.workspace.color } : null,
         }));
     }
 
@@ -237,14 +234,12 @@ export class DashboardService {
         const workspaceIds = await this.getUserWorkspaceIds(userId);
         const events: DueEventDto[] = [];
 
-        // Get user's cards via workspace-linked bank accounts
         const cards = await this.prisma.card.findMany({
             where: {
                 linkedBankAccount: { workspaceId: { in: workspaceIds } },
             },
         });
 
-        // Add card due dates
         for (const card of cards) {
             const cardName = this.encryption.decrypt(card.name);
             const currentDate = new Date(from);
@@ -286,7 +281,6 @@ export class DashboardService {
             }
         }
 
-        // Get recurrent transactions across all workspaces
         const recurrentTransactions = await this.prisma.transaction.findMany({
             where: {
                 workspaceId: { in: workspaceIds },
@@ -297,7 +291,6 @@ export class DashboardService {
             },
         });
 
-        // Calculate next occurrences for recurrent transactions
         for (const tx of recurrentTransactions) {
             if (tx.recurrenceRule) {
                 const rule = tx.recurrenceRule as any;
@@ -329,7 +322,6 @@ export class DashboardService {
             }
         }
 
-        // Sort by date
         return events.sort((a, b) => a.date.getTime() - b.date.getTime());
     }
 
@@ -360,7 +352,131 @@ export class DashboardService {
         }));
     }
 
-    // Helper methods
+    async getCalendarEvents(
+        userId: string,
+        workspaceId: string | null,
+        month: number,
+        year: number,
+    ): Promise<CalendarEvent[]> {
+        const workspaces = await this.prisma.workspace.findMany({
+            where: {
+                OR: [
+                    { ownerId: userId },
+                    { members: { some: { userId } } },
+                ],
+                ...(workspaceId ? { id: workspaceId } : {}),
+            },
+            select: { id: true },
+        });
+
+        const workspaceIds = workspaces.map(w => w.id);
+
+        const startDate = new Date(year, month - 1, 1);
+        const endDate = new Date(year, month, 0, 23, 59, 59);
+
+        const events: CalendarEvent[] = [];
+
+        const subscriptions = await this.prisma.subscription.findMany({
+            where: {
+                workspaceId: { in: workspaceIds },
+                isActive: true,
+                nextBillingDate: {
+                    gte: startDate,
+                    lte: endDate,
+                },
+            },
+        });
+
+        for (const subscription of subscriptions) {
+            events.push({
+                date: subscription.nextBillingDate.toISOString(),
+                type: 'SUBSCRIPTION',
+                title: subscription.name,
+                color: '#8B5CF6',
+                amount: Number(subscription.amount),
+                currency: subscription.currency,
+            });
+        }
+
+        const recurringTransactions = await this.prisma.transaction.findMany({
+            where: {
+                workspaceId: { in: workspaceIds },
+                isRecurrent: true,
+            },
+            include: {
+                category: true,
+            },
+        });
+
+        for (const transaction of recurringTransactions) {
+            if (transaction.recurrenceRule) {
+                const rule = transaction.recurrenceRule as any;
+                if (rule.frequency === 'MONTHLY') {
+                    const currentDate = new Date(startDate);
+                    while (currentDate <= endDate) {
+                        const nextOccurrence = new Date(
+                            currentDate.getFullYear(),
+                            currentDate.getMonth(),
+                            rule.dayOfMonth || transaction.date.getDate(),
+                        );
+
+                        if (nextOccurrence >= startDate && nextOccurrence <= endDate) {
+                            events.push({
+                                date: nextOccurrence.toISOString(),
+                                type: 'RECURRING',
+                                title: transaction.description
+                                    ? this.encryption.decrypt(transaction.description)
+                                    : transaction.category.name,
+                                color: '#3B82F6',
+                                amount: Number(transaction.amount),
+                                currency: transaction.currency,
+                            });
+                        }
+
+                        currentDate.setMonth(currentDate.getMonth() + 1);
+                    }
+                }
+            }
+        }
+
+        const userWorkspace = await this.prisma.workspace.findFirst({
+            where: { ownerId: userId },
+            select: { id: true },
+        });
+
+        if (userWorkspace) {
+            const userBankAccounts = await this.prisma.bankAccount.findMany({
+                where: { workspaceId: userWorkspace.id },
+                include: { cards: true },
+            });
+
+            for (const account of userBankAccounts) {
+                for (const card of account.cards) {
+                    const dueDate = new Date(year, month - 1, card.dueDay);
+                    if (dueDate >= startDate && dueDate <= endDate) {
+                        events.push({
+                            date: dueDate.toISOString(),
+                            type: 'CARD_DUE',
+                            title: this.encryption.decrypt(card.name) + ' due',
+                            color: '#EF4444',
+                        });
+                    }
+
+                    const closeDate = new Date(year, month - 1, card.statementCloseDay);
+                    if (closeDate >= startDate && closeDate <= endDate) {
+                        events.push({
+                            date: closeDate.toISOString(),
+                            type: 'CARD_CLOSE',
+                            title: this.encryption.decrypt(card.name) + ' close',
+                            color: '#F97316',
+                        });
+                    }
+                }
+            }
+        }
+
+        return events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    }
 
     private async convertCurrency(
         amount: number,
@@ -372,7 +488,6 @@ export class DashboardService {
             return amount;
         }
 
-        // Get exchange rate for the date (or closest previous date)
         const exchangeRate = await this.prisma.exchangeRate.findFirst({
             where: {
                 fromCurrency,
@@ -387,7 +502,6 @@ export class DashboardService {
         });
 
         if (!exchangeRate) {
-            // If no rate found, return original amount (or throw error in production)
             console.warn(
                 `No exchange rate found for ${fromCurrency} to ${toCurrency}`,
             );
