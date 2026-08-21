@@ -1,9 +1,11 @@
 import { IsNumber, IsString, IsEnum, IsOptional, IsDateString, IsBoolean, IsObject, ValidateIf, IsNotEmpty } from 'class-validator';
+import { PartialType, OmitType } from '@nestjs/mapped-types';
 
 export enum TransactionType {
     INCOME = 'INCOME',
     EXPENSE = 'EXPENSE',
     TRANSFER = 'TRANSFER',
+    SAVING = 'SAVING',
 }
 
 export enum PaymentMethod {
@@ -33,7 +35,8 @@ export class CreateTransactionDto {
     categoryId: string;
 
     @IsEnum(PaymentMethod)
-    paymentMethod: PaymentMethod;
+    @IsOptional()
+    paymentMethod?: PaymentMethod | null;
 
     @ValidateIf(o => o.paymentMethod === PaymentMethod.BANK_ACCOUNT)
     @IsString()
@@ -42,6 +45,10 @@ export class CreateTransactionDto {
     @ValidateIf(o => o.paymentMethod === PaymentMethod.CARD)
     @IsString()
     cardId?: string;
+
+    @IsString()
+    @IsOptional()
+    savingGoalId?: string;
 
     @IsString()
     @IsNotEmpty()
@@ -60,4 +67,18 @@ export class CreateTransactionDto {
     recurrenceRule?: any;
 }
 
-export class UpdateTransactionDto extends CreateTransactionDto { }
+export class UpdateTransactionDto extends PartialType(OmitType(CreateTransactionDto, ['workspaceId'] as const)) { }
+
+export class AssignPaymentMethodDto {
+    @IsEnum(PaymentMethod)
+    @IsNotEmpty()
+    paymentMethod: PaymentMethod;
+
+    @IsString()
+    @IsOptional()
+    bankAccountId?: string;
+
+    @IsString()
+    @IsOptional()
+    cardId?: string;
+}
