@@ -3,6 +3,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { FindUserDto } from './dto/find-user.dto';
 import { RemoveUserDto } from './dto/remove-user-dto';
+import { UpdateUserSettingsDto } from './dto/update-settings.dto';
 
 @Injectable()
 export class UsersService {
@@ -76,6 +77,24 @@ export class UsersService {
         lastName: true,
         preferredCurrency: true,
       },
+    });
+  }
+
+  async getSettings(userId: string) {
+    return this.prisma.userSettings.upsert({
+      where: { userId },
+      create: { userId, cotizacion1: 'oficial' },
+      update: {},
+      select: { cotizacion1: true, cotizacion2: true },
+    });
+  }
+
+  async updateSettings(userId: string, dto: UpdateUserSettingsDto) {
+    return this.prisma.userSettings.upsert({
+      where: { userId },
+      create: { userId, ...dto },
+      update: { ...dto },
+      select: { cotizacion1: true, cotizacion2: true },
     });
   }
 }

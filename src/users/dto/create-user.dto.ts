@@ -22,4 +22,8 @@ export class CreateUserDto {
     @IsOptional()
     @IsString()
     preferredCurrency?: string;
+
+    @IsOptional()
+    @IsString()
+    inviteToken?: string;
 }
