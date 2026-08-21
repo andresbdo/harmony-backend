@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { EncryptionService } from 'src/common/encryption/encryption.service';
 import { CreateBudgetDto, UpdateBudgetDto, CreateSavingDto, UpdateSavingDto } from './dto/budget.dto';
@@ -11,24 +12,46 @@ export class BudgetsService {
   ) {}
 
   private decryptSaving(saving: any) {
-    return saving.description
-      ? { ...saving, description: this.encryption.decrypt(saving.description) }
-      : saving;
+    return {
+      ...saving,
+      amount: saving.targetAmount,
+      description: saving.name ? this.encryption.decrypt(saving.name) : undefined,
+    };
   }
 
   // Budget Methods
   async createBudget(workspaceId: string, dto: CreateBudgetDto) {
-    return this.prisma.budget.create({
-      data: {
+    const existing = await this.prisma.budget.findFirst({
+      where: {
         workspaceId,
-        amount: dto.amount,
-        currency: dto.currency,
         type: dto.type,
-        categoryId: dto.categoryId,
+        categoryId: dto.categoryId ?? null,
         month: dto.month,
         year: dto.year,
       },
     });
+    if (existing) {
+      throw new ConflictException('Ya existe un presupuesto para esta categoría en este mes');
+    }
+
+    try {
+      return await this.prisma.budget.create({
+        data: {
+          workspaceId,
+          amount: dto.amount,
+          currency: dto.currency,
+          type: dto.type,
+          categoryId: dto.categoryId,
+          month: dto.month,
+          year: dto.year,
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('Ya existe un presupuesto para esta categoría en este mes');
+      }
+      throw error;
+    }
   }
 
   async findAllBudgets(workspaceId: string, year: number, month?: number) {
@@ -62,9 +85,9 @@ export class BudgetsService {
     const saving = await this.prisma.saving.create({
       data: {
         workspaceId,
-        amount: dto.amount,
+        targetAmount: dto.amount,
         currency: dto.currency,
-        description: dto.description ? this.encryption.encrypt(dto.description) : null,
+        name: this.encryption.encrypt(dto.description || 'Ahorro'),
       },
     });
     return this.decryptSaving(saving);
@@ -89,8 +112,9 @@ export class BudgetsService {
     const updated = await this.prisma.saving.update({
       where: { id },
       data: {
-        ...dto,
-        description: dto.description ? this.encryption.encrypt(dto.description) : undefined,
+        targetAmount: dto.amount,
+        currency: dto.currency,
+        name: dto.description ? this.encryption.encrypt(dto.description) : undefined,
       },
     });
     return this.decryptSaving(updated);
@@ -99,5 +123,38 @@ export class BudgetsService {
   async removeSaving(id: string, workspaceId: string) {
     await this.findOneSaving(id, workspaceId);
     return this.prisma.saving.delete({ where: { id } });
+  }
+
+  async checkExceeded(
+    workspaceId: string,
+    categoryId: string,
+    month: number,
+    year: number,
+  ): Promise<{ exceeded: boolean; budget: any | null; totalSpent: number }> {
+    const budget = await this.prisma.budget.findFirst({
+      where: { categoryId, month, year, workspaceId },
+    });
+
+    if (!budget) {
+      return { exceeded: false, budget: null, totalSpent: 0 };
+    }
+
+    const txs = await this.prisma.transaction.findMany({
+      where: {
+        categoryId,
+        workspaceId,
+        type: 'EXPENSE',
+        date: {
+          gte: new Date(Date.UTC(year, month - 1, 1, 3, 0, 0)),
+          lt: new Date(Date.UTC(year, month, 1, 3, 0, 0)),
+        },
+      },
+      select: { amount: true },
+    });
+
+    const totalSpent = txs.reduce((sum, t) => sum + parseFloat(t.amount.toString()), 0);
+    const exceeded = totalSpent > parseFloat(budget.amount.toString());
+
+    return { exceeded, budget, totalSpent };
   }
 }

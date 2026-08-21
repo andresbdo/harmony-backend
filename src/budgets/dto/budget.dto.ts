@@ -1,4 +1,5 @@
 import { IsString, IsNumber, IsOptional, IsNotEmpty, Min, Max } from 'class-validator';
+import { PartialType, OmitType } from '@nestjs/mapped-types';
 
 export class CreateBudgetDto {
     @IsString()
@@ -28,7 +29,7 @@ export class CreateBudgetDto {
     year: number;
 }
 
-export class UpdateBudgetDto extends CreateBudgetDto { }
+export class UpdateBudgetDto extends PartialType(OmitType(CreateBudgetDto, ['workspaceId'] as const)) { }
 
 export class CreateSavingDto {
     @IsString()
@@ -47,4 +48,4 @@ export class CreateSavingDto {
     description?: string;
 }
 
-export class UpdateSavingDto extends CreateSavingDto { }
+export class UpdateSavingDto extends PartialType(OmitType(CreateSavingDto, ['workspaceId'] as const)) { }
