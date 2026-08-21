@@ -6,8 +6,11 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModuleOptions } from '@nestjs/jwt';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { ApiTokenStrategy } from './strategies/api-token.strategy';
 import { PrismaModule } from '../prisma/prisma.module';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
+import { ApiTokensController } from './api-tokens/api-tokens.controller';
+import { ApiTokensService } from './api-tokens/api-tokens.service';
 
 @Module({
   imports: [UsersModule, PrismaModule, WorkspacesModule, JwtModule.registerAsync({
@@ -25,8 +28,8 @@ import { WorkspacesModule } from '../workspaces/workspaces.module';
     },
     inject: [ConfigService],
   })],
-  providers: [AuthService, JwtStrategy],
-  controllers: [AuthController],
+  providers: [AuthService, JwtStrategy, ApiTokenStrategy, ApiTokensService],
+  controllers: [AuthController, ApiTokensController],
   exports: [JwtStrategy],
 })
 export class AuthModule { }

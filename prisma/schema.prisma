@@ -30,6 +30,18 @@ model User {
   notifications    Notification[]
   settings         UserSettings?
   categories       Category[]
+  apiTokens        ApiToken[]
+}
+
+model ApiToken {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  tokenHash  String    @unique
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
 }
 
 model Workspace {
