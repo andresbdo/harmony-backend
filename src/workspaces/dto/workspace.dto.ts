@@ -1,6 +1,6 @@
 import { IsString, IsNumber, IsEmail, IsOptional, Min, Max, IsEnum, IsInt } from 'class-validator';
 import { PartialType } from '@nestjs/mapped-types';
-import { WorkspaceCycle } from '@prisma/client';
+import { WorkspaceCycle, SplitMode } from '@prisma/client';
 
 export class CreateWorkspaceDto {
     @IsString()
@@ -31,9 +31,19 @@ export class CreateWorkspaceDto {
     @IsOptional()
     @IsString()
     color?: string;
+
+    @IsOptional()
+    @IsEnum(SplitMode)
+    splitMode?: SplitMode;
 }
 
 export class UpdateWorkspaceDto extends PartialType(CreateWorkspaceDto) { }
+
+export class UpdateMemberSalaryDto {
+    @IsNumber()
+    @Min(0)
+    salary: number;
+}
 
 export class AddMemberDto {
     @IsEmail()

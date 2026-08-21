@@ -14,6 +14,11 @@ enum WorkspaceCycle {
   YEARLY
 }
 
+enum SplitMode {
+  MANUAL
+  SALARY_BASED
+}
+
 model User {
   id                String   @id @default(uuid())
   email             String   @unique
@@ -56,6 +61,7 @@ model Workspace {
   cycle       WorkspaceCycle @default(MONTHLY)
   weekStartDay Int      @default(1)
   yearStartMonth Int     @default(1)
+  splitMode   SplitMode @default(MANUAL)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -92,6 +98,7 @@ model WorkspaceMember {
   email                    String
   nameAlias                String
   responsibilityPercentage Decimal   @default(50)
+  salary                   Decimal?
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
 

@@ -10,7 +10,7 @@ import {
     Request,
 } from '@nestjs/common';
 import { WorkspacesService } from './workspaces.service';
-import { CreateWorkspaceDto, UpdateWorkspaceDto, AddMemberDto, UpdateMemberDto } from './dto/workspace.dto';
+import { CreateWorkspaceDto, UpdateWorkspaceDto, AddMemberDto, UpdateMemberDto, UpdateMemberSalaryDto } from './dto/workspace.dto';
 import { UpdateSettlementStatusDto } from './dto/settlement.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Public } from '../common/decorators/public.decorator';
@@ -64,6 +64,11 @@ export class WorkspacesController {
     @Patch(':id/members/:memberId')
     updateMember(@Request() req, @Param('id') id: string, @Param('memberId') memberId: string, @Body() dto: UpdateMemberDto) {
         return this.workspacesService.updateMember(id, memberId, req.user.id, dto);
+    }
+
+    @Patch(':id/members/:memberId/salary')
+    updateMemberSalary(@Request() req, @Param('id') id: string, @Param('memberId') memberId: string, @Body() dto: UpdateMemberSalaryDto) {
+        return this.workspacesService.updateMemberSalary(id, memberId, req.user.id, dto);
     }
 
     @Delete(':id/members/:memberId')

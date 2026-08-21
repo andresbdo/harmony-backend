@@ -1,13 +1,50 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { randomBytes } from 'crypto';
-import { CreateWorkspaceDto, UpdateWorkspaceDto, AddMemberDto, UpdateMemberDto } from './dto/workspace.dto';
+import { CreateWorkspaceDto, UpdateWorkspaceDto, AddMemberDto, UpdateMemberDto, UpdateMemberSalaryDto } from './dto/workspace.dto';
 import { UpdateSettlementStatusDto } from './dto/settlement.dto';
 import { getCurrentPeriodBounds, computePairwiseBalances } from './settlement.util';
+import { SplitMode } from '@prisma/client';
+
+interface MemberLike {
+    id: string;
+    responsibilityPercentage: unknown;
+    salary: unknown;
+}
 
 @Injectable()
 export class WorkspacesService {
     constructor(private prisma: PrismaService) { }
+
+    /**
+     * Salary-based mode only overrides percentages once every member has a
+     * salary on file — otherwise falls back to each member's stored %, so a
+     * partially-filled-in workspace never divides by an incomplete total.
+     */
+    private withEffectivePercentages<T extends MemberLike>(
+        members: T[],
+        splitMode: SplitMode,
+    ): (T & { responsibilityPercentage: number })[] {
+        const parsed = members.map(m => ({
+            member: m,
+            responsibilityPercentage: parseFloat(m.responsibilityPercentage?.toString() ?? '0'),
+            salary: m.salary != null ? parseFloat(m.salary.toString()) : null,
+        }));
+
+        const canUseSalary =
+            splitMode === 'SALARY_BASED' &&
+            parsed.every(p => p.salary != null && p.salary > 0);
+
+        if (!canUseSalary) {
+            return parsed.map(p => ({ ...p.member, responsibilityPercentage: p.responsibilityPercentage }));
+        }
+
+        const total = parsed.reduce((sum, p) => sum + (p.salary ?? 0), 0);
+        return parsed.map(p => ({
+            ...p.member,
+            responsibilityPercentage: total > 0 ? ((p.salary ?? 0) / total) * 100 : p.responsibilityPercentage,
+        }));
+    }
 
     async create(userId: string, dto: CreateWorkspaceDto) {
         const user = await this.prisma.user.findUnique({
@@ -35,7 +72,7 @@ export class WorkspacesService {
     }
 
     async findAll(userId: string) {
-        return this.prisma.workspace.findMany({
+        const workspaces = await this.prisma.workspace.findMany({
             where: {
                 OR: [
                     { ownerId: userId },
@@ -46,6 +83,11 @@ export class WorkspacesService {
                 members: true,
             },
         });
+
+        return workspaces.map(ws => ({
+            ...ws,
+            members: this.withEffectivePercentages(ws.members, ws.splitMode),
+        }));
     }
 
     async findOne(id: string, userId: string) {
@@ -64,6 +106,7 @@ export class WorkspacesService {
         });
 
         if (!workspace) throw new NotFoundException('Workspace not found');
+        workspace.members = this.withEffectivePercentages(workspace.members, workspace.splitMode) as typeof workspace.members;
         return workspace;
     }
 
@@ -197,10 +240,11 @@ export class WorkspacesService {
             },
         });
 
+        const effectiveMembers = this.withEffectivePercentages(workspace.members, workspace.splitMode);
         const balances = computePairwiseBalances(
-            workspace.members.map(m => ({
+            effectiveMembers.map(m => ({
                 id: m.id,
-                responsibilityPercentage: parseFloat(m.responsibilityPercentage.toString()),
+                responsibilityPercentage: m.responsibilityPercentage,
             })),
             transactions.map(tx => ({
                 amount: parseFloat(tx.amount.toString()),
@@ -228,6 +272,23 @@ export class WorkspacesService {
         return this.prisma.workspaceMember.update({
             where: { id: memberId },
             data: dto,
+        });
+    }
+
+    async updateMemberSalary(workspaceId: string, memberId: string, userId: string, dto: UpdateMemberSalaryDto) {
+        const workspace = await this.findOne(workspaceId, userId);
+        const member = workspace.members.find(m => m.id === memberId);
+        if (!member) throw new NotFoundException('Member not found');
+
+        const isSelf = member.userId === userId;
+        const isOwnerOfUnjoinedMember = workspace.ownerId === userId && member.userId === null;
+        if (!isSelf && !isOwnerOfUnjoinedMember) {
+            throw new ForbiddenException('Solo el propio miembro puede cargar su sueldo');
+        }
+
+        return this.prisma.workspaceMember.update({
+            where: { id: memberId },
+            data: { salary: dto.salary },
         });
     }
 
