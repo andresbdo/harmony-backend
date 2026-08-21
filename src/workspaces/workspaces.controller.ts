@@ -11,7 +11,9 @@ import {
 } from '@nestjs/common';
 import { WorkspacesService } from './workspaces.service';
 import { CreateWorkspaceDto, UpdateWorkspaceDto, AddMemberDto, UpdateMemberDto } from './dto/workspace.dto';
+import { UpdateSettlementStatusDto } from './dto/settlement.dto';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { Public } from 'src/common/decorators/public.decorator';
 
 @Controller('workspaces')
 @UseGuards(JwtAuthGuard)
@@ -28,9 +30,20 @@ export class WorkspacesController {
         return this.workspacesService.findAll(req.user.id);
     }
 
+    @Get('join-preview/:token')
+    @Public()
+    getJoinPreview(@Param('token') token: string) {
+        return this.workspacesService.getJoinPreview(token);
+    }
+
     @Get(':id')
     findOne(@Request() req, @Param('id') id: string) {
         return this.workspacesService.findOne(id, req.user.id);
+    }
+
+    @Patch(':id')
+    update(@Request() req, @Param('id') id: string, @Body() dto: UpdateWorkspaceDto) {
+        return this.workspacesService.update(id, req.user.id, dto);
     }
 
     @Post('join/:token')
@@ -56,6 +69,26 @@ export class WorkspacesController {
     @Delete(':id/members/:memberId')
     removeMember(@Request() req, @Param('id') id: string, @Param('memberId') memberId: string) {
         return this.workspacesService.removeMember(id, memberId, req.user.id);
+    }
+
+    @Get(':id/settlements')
+    listSettlements(@Request() req, @Param('id') id: string) {
+        return this.workspacesService.listSettlements(id, req.user.id);
+    }
+
+    @Post(':id/settlements/close')
+    closeNow(@Request() req, @Param('id') id: string) {
+        return this.workspacesService.closeNow(id, req.user.id);
+    }
+
+    @Patch(':id/settlements/:settlementId')
+    updateSettlementStatus(@Request() req, @Param('id') id: string, @Param('settlementId') settlementId: string, @Body() dto: UpdateSettlementStatusDto) {
+        return this.workspacesService.updateSettlementStatus(id, settlementId, req.user.id, dto);
+    }
+
+    @Post(':id/regenerate-invite')
+    regenerateInviteToken(@Request() req, @Param('id') id: string) {
+        return this.workspacesService.regenerateInviteToken(id, req.user.id);
     }
 
     @Delete(':id')

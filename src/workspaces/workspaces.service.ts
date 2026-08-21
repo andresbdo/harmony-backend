@@ -2,6 +2,8 @@ import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/commo
 import { PrismaService } from 'src/prisma/prisma.service';
 import { randomBytes } from 'crypto';
 import { CreateWorkspaceDto, UpdateWorkspaceDto, AddMemberDto, UpdateMemberDto } from './dto/workspace.dto';
+import { UpdateSettlementStatusDto } from './dto/settlement.dto';
+import { getCurrentPeriodBounds, computePairwiseBalances } from './settlement.util';
 
 @Injectable()
 export class WorkspacesService {
@@ -69,7 +71,6 @@ export class WorkspacesService {
         const workspace = await this.findOne(workspaceId, userId);
         if (workspace.ownerId !== userId) throw new ForbiddenException('Only owners can add members');
 
-        // Check if user exists to link them
         const existingUser = await this.prisma.user.findUnique({ where: { email: dto.email } });
 
         return this.prisma.workspaceMember.create({
@@ -84,15 +85,23 @@ export class WorkspacesService {
     async calculateClosing(workspaceId: string, userId: string) {
         const workspace = await this.findOne(workspaceId, userId);
 
-        // Get transactions since last cutoff or similar logic
-        // For MVP, we'll fetch all transactions for the current month
         const now = new Date();
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        let periodStart: Date;
+        let periodEnd: Date;
+
+        const periodBounds = getCurrentPeriodBounds(workspace, now);
+        if (periodBounds === null) {
+            periodStart = workspace.createdAt;
+            periodEnd = now;
+        } else {
+            periodStart = periodBounds.periodStart;
+            periodEnd = periodBounds.periodEnd;
+        }
 
         const transactions = await this.prisma.transaction.findMany({
             where: {
                 workspaceId,
-                date: { gte: startOfMonth },
+                date: { gte: periodStart, lte: periodEnd },
             },
             include: {
                 paidByMember: true,
@@ -100,29 +109,116 @@ export class WorkspacesService {
         });
 
         const totalSpent = transactions.reduce((acc, tx) => acc + parseFloat(tx.amount.toString()), 0);
-        const members = workspace.members;
-
-        // Calculate how much each member SHOULD have paid based on their percentage
-        const summary = members.map(member => {
-            const share = (totalSpent * parseFloat(member.responsibilityPercentage.toString())) / 100;
-            const actualPaid = transactions
-                .filter(tx => tx.paidByMemberId === member.id)
-                .reduce((acc, tx) => acc + parseFloat(tx.amount.toString()), 0);
-
-            return {
-                memberId: member.id,
-                name: member.nameAlias,
-                share,
-                actualPaid,
-                balance: actualPaid - share, // Positive means they are owed money, negative means they owe
-            };
-        });
+        const balances = computePairwiseBalances(
+            workspace.members.map(m => ({
+                id: m.id,
+                responsibilityPercentage: parseFloat(m.responsibilityPercentage.toString()),
+            })),
+            transactions.map(tx => ({
+                amount: parseFloat(tx.amount.toString()),
+                paidByMemberId: tx.paidByMemberId,
+            })),
+        );
 
         return {
             workspaceName: workspace.name,
             totalSpent,
-            summary,
+            balances,
         };
+    }
+
+    async update(id: string, userId: string, dto: UpdateWorkspaceDto) {
+        const workspace = await this.findOne(id, userId);
+        if (workspace.ownerId !== userId) throw new ForbiddenException('Only owners can update workspaces');
+
+        if (dto.cycle && dto.cycle !== workspace.cycle) {
+            await this.closeCurrentPeriod(id);
+        }
+
+        return this.prisma.workspace.update({
+            where: { id },
+            data: dto,
+        });
+    }
+
+    async closeNow(workspaceId: string, userId: string) {
+        const workspace = await this.findOne(workspaceId, userId);
+        if (workspace.cycle !== 'INDEFINITE') {
+            throw new ForbiddenException('Only INDEFINITE workspaces can be manually closed');
+        }
+
+        return this.closeCurrentPeriod(workspaceId);
+    }
+
+    async listSettlements(workspaceId: string, userId: string) {
+        await this.findOne(workspaceId, userId);
+        return this.prisma.workspaceSettlement.findMany({
+            where: { workspaceId },
+            orderBy: { periodStart: 'desc' },
+        });
+    }
+
+    async updateSettlementStatus(workspaceId: string, settlementId: string, userId: string, dto: UpdateSettlementStatusDto) {
+        await this.findOne(workspaceId, userId);
+        return this.prisma.workspaceSettlement.update({
+            where: { id: settlementId },
+            data: { status: dto.status },
+        });
+    }
+
+    async closeCurrentPeriod(workspaceId: string) {
+        const workspace = await this.prisma.workspace.findUnique({
+            where: { id: workspaceId },
+            include: { members: true },
+        });
+
+        if (!workspace) throw new NotFoundException('Workspace not found');
+
+        const now = new Date();
+        let periodStart: Date;
+        let periodEnd: Date;
+
+        const periodBounds = getCurrentPeriodBounds(workspace, now);
+        if (periodBounds === null) {
+            periodStart = workspace.createdAt;
+            periodEnd = now;
+        } else {
+            periodStart = periodBounds.periodStart;
+            periodEnd = periodBounds.periodEnd;
+        }
+
+        const transactions = await this.prisma.transaction.findMany({
+            where: {
+                workspaceId,
+                date: { gte: periodStart, lte: periodEnd },
+            },
+            include: {
+                paidByMember: true,
+            },
+        });
+
+        const balances = computePairwiseBalances(
+            workspace.members.map(m => ({
+                id: m.id,
+                responsibilityPercentage: parseFloat(m.responsibilityPercentage.toString()),
+            })),
+            transactions.map(tx => ({
+                amount: parseFloat(tx.amount.toString()),
+                paidByMemberId: tx.paidByMemberId,
+            })),
+        );
+
+        await this.prisma.workspaceSettlement.upsert({
+            where: { workspaceId_periodStart: { workspaceId, periodStart } },
+            create: {
+                workspaceId,
+                periodStart,
+                periodEnd,
+                balances: balances as any,
+                status: 'PENDING',
+            },
+            update: {},
+        });
     }
 
     async updateMember(workspaceId: string, memberId: string, userId: string, dto: UpdateMemberDto) {
@@ -145,6 +241,7 @@ export class WorkspacesService {
     async remove(id: string, userId: string) {
         const workspace = await this.findOne(id, userId);
         if (workspace.ownerId !== userId) throw new ForbiddenException('Only owners can delete workspaces');
+        if (workspace.isPersonal === true) throw new ForbiddenException('Personal workspace cannot be deleted');
 
         return this.prisma.workspace.delete({ where: { id } });
     }
@@ -157,7 +254,13 @@ export class WorkspacesService {
         if (!workspace) throw new NotFoundException('Enlace de invitación inválido');
 
         const alreadyMember = workspace.members.some(m => m.userId === userId);
-        if (alreadyMember) return workspace;
+        if (alreadyMember) {
+            await this.prisma.workspace.update({
+                where: { id: workspace.id },
+                data: { inviteToken: null },
+            });
+            return workspace;
+        }
 
         const user = await this.prisma.user.findUnique({
             where: { id: userId },
@@ -175,9 +278,45 @@ export class WorkspacesService {
             },
         });
 
+        await this.prisma.workspace.update({
+            where: { id: workspace.id },
+            data: { inviteToken: null },
+        });
+
         return this.prisma.workspace.findUnique({
             where: { id: workspace.id },
             include: { members: true },
         });
+    }
+
+    async regenerateInviteToken(workspaceId: string, userId: string) {
+        const workspace = await this.findOne(workspaceId, userId);
+        if (workspace.ownerId !== userId) throw new ForbiddenException('Only owners can regenerate invite tokens');
+
+        const newToken = randomBytes(16).toString('hex');
+
+        await this.prisma.workspace.update({
+            where: { id: workspaceId },
+            data: { inviteToken: newToken },
+        });
+
+        return { inviteToken: newToken };
+    }
+
+    async getJoinPreview(token: string) {
+        const workspace = await this.prisma.workspace.findUnique({
+            where: { inviteToken: token },
+            include: { members: true },
+        });
+
+        if (!workspace) {
+            throw new NotFoundException('Invalid or expired invite link');
+        }
+
+        return {
+            id: workspace.id,
+            name: workspace.name,
+            memberCount: workspace.members.length,
+        };
     }
 }
