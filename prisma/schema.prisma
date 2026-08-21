@@ -7,6 +7,13 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum WorkspaceCycle {
+  INDEFINITE
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
 model User {
   id                String   @id @default(uuid())
   email             String   @unique
@@ -20,25 +27,48 @@ model User {
   ownedWorkspaces  Workspace[]
   workspaceMembers WorkspaceMember[]
   transactions     Transaction[]
+  notifications    Notification[]
+  settings         UserSettings?
+  categories       Category[]
 }
 
 model Workspace {
   id          String   @id @default(uuid())
   name        String
+  color       String   @default("#1F6C9F")
   ownerId     String
   owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   isPersonal  Boolean  @default(false)
   inviteToken String?  @unique
   cutoffDay   Int      @default(1)
+  cycle       WorkspaceCycle @default(MONTHLY)
+  weekStartDay Int      @default(1)
+  yearStartMonth Int     @default(1)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  members      WorkspaceMember[]
-  transactions Transaction[]
-  categories   Category[]
-  bankAccounts BankAccount[]
-  budgets      Budget[]
-  savings      Saving[]
+  members       WorkspaceMember[]
+  transactions  Transaction[]
+  categories    Category[]
+  bankAccounts  BankAccount[]
+  budgets       Budget[]
+  savings       Saving[]
+  subscriptions Subscription[]
+  settlements   WorkspaceSettlement[]
+}
+
+model WorkspaceSettlement {
+  id          String   @id @default(uuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  periodStart DateTime
+  periodEnd   DateTime
+  balances    Json
+  status      String   @default("PENDING")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([workspaceId, periodStart])
 }
 
 model WorkspaceMember {
@@ -65,6 +95,8 @@ model Category {
   scope       String
   workspaceId String?
   workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String?
+  user        User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
@@ -126,11 +158,14 @@ model Saving {
   id          String    @id @default(uuid())
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  amount      Decimal
+  name        String
+  targetAmount Decimal
+  targetDate  DateTime?
   currency    String
-  description String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+
+  transactions Transaction[]
 }
 
 model Transaction {
@@ -153,11 +188,17 @@ model Transaction {
   paidByMemberId String?
   paidByMember   WorkspaceMember? @relation("PaidBy", fields: [paidByMemberId], references: [id], onDelete: SetNull)
 
-  paymentMethod String
+  paymentMethod String?
   bankAccountId String?
   bankAccount   BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
   cardId        String?
   card          Card?        @relation(fields: [cardId], references: [id], onDelete: SetNull)
+
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  savingGoalId String?
+  savingGoal   Saving? @relation(fields: [savingGoalId], references: [id], onDelete: SetNull)
 
   isRecurrent    Boolean @default(false)
   recurrenceRule Json?
@@ -166,14 +207,51 @@ model Transaction {
   updatedAt DateTime @updatedAt
 }
 
+model Subscription {
+  id              String    @id @default(uuid())
+  name            String
+  amount          Decimal
+  currency        String
+  frequency       String
+  nextBillingDate DateTime
+  workspaceId     String
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  transactions Transaction[]
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  message   String
+  read      Boolean  @default(false)
+  metadata  Json?
+  createdAt DateTime @default(now())
+}
+
+model UserSettings {
+  id         String  @id @default(uuid())
+  userId     String  @unique
+  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cotizacion1 String @default("oficial")
+  cotizacion2 String?
+}
+
 model ExchangeRate {
   id           String   @id @default(uuid())
   fromCurrency String
   toCurrency   String
   rate         Decimal
+  name         String?
+  compra       Float?
   date         DateTime @default(now())
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  @@unique([fromCurrency, toCurrency, date])
+  @@unique([fromCurrency, toCurrency, date, name])
 }

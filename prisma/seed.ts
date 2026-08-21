@@ -7,23 +7,23 @@ const prisma = new PrismaClient();
 async function main() {
     console.log('🌱 Starting seed...');
 
-    // 1. Seed default categories (PERSONAL scope)
+    // 1. Seed default categories (GLOBAL scope)
     const categories = [
         // EXPENSE categories
-        { name: 'Alimentación', type: 'EXPENSE', color: '#10b981', icon: 'ShoppingCart', scope: 'PERSONAL' },
-        { name: 'Transporte', type: 'EXPENSE', color: '#3b82f6', icon: 'Car', scope: 'PERSONAL' },
-        { name: 'Entretenimiento', type: 'EXPENSE', color: '#8b5cf6', icon: 'Film', scope: 'PERSONAL' },
-        { name: 'Salud', type: 'EXPENSE', color: '#ef4444', icon: 'Heart', scope: 'PERSONAL' },
-        { name: 'Educación', type: 'EXPENSE', color: '#f59e0b', icon: 'BookOpen', scope: 'PERSONAL' },
-        { name: 'Vivienda', type: 'EXPENSE', color: '#6366f1', icon: 'Home', scope: 'PERSONAL' },
-        { name: 'Servicios', type: 'EXPENSE', color: '#14b8a6', icon: 'Zap', scope: 'PERSONAL' },
-        { name: 'Otros Gastos', type: 'EXPENSE', color: '#64748b', icon: 'MoreHorizontal', scope: 'PERSONAL' },
+        { name: 'Alimentación', type: 'EXPENSE', color: '#10b981', icon: 'ShoppingCart', scope: 'GLOBAL' },
+        { name: 'Transporte', type: 'EXPENSE', color: '#3b82f6', icon: 'Car', scope: 'GLOBAL' },
+        { name: 'Entretenimiento', type: 'EXPENSE', color: '#8b5cf6', icon: 'Film', scope: 'GLOBAL' },
+        { name: 'Salud', type: 'EXPENSE', color: '#ef4444', icon: 'Heart', scope: 'GLOBAL' },
+        { name: 'Educación', type: 'EXPENSE', color: '#f59e0b', icon: 'BookOpen', scope: 'GLOBAL' },
+        { name: 'Vivienda', type: 'EXPENSE', color: '#6366f1', icon: 'Home', scope: 'GLOBAL' },
+        { name: 'Servicios', type: 'EXPENSE', color: '#14b8a6', icon: 'Zap', scope: 'GLOBAL' },
+        { name: 'Otros Gastos', type: 'EXPENSE', color: '#64748b', icon: 'MoreHorizontal', scope: 'GLOBAL' },
 
         // INCOME categories
-        { name: 'Salario', type: 'INCOME', color: '#22c55e', icon: 'Briefcase', scope: 'PERSONAL' },
-        { name: 'Freelance', type: 'INCOME', color: '#06b6d4', icon: 'Code', scope: 'PERSONAL' },
-        { name: 'Inversiones', type: 'INCOME', color: '#a855f7', icon: 'TrendingUp', scope: 'PERSONAL' },
-        { name: 'Otros Ingresos', type: 'INCOME', color: '#84cc16', icon: 'PlusCircle', scope: 'PERSONAL' },
+        { name: 'Salario', type: 'INCOME', color: '#22c55e', icon: 'Briefcase', scope: 'GLOBAL' },
+        { name: 'Freelance', type: 'INCOME', color: '#06b6d4', icon: 'Code', scope: 'GLOBAL' },
+        { name: 'Inversiones', type: 'INCOME', color: '#a855f7', icon: 'TrendingUp', scope: 'GLOBAL' },
+        { name: 'Otros Ingresos', type: 'INCOME', color: '#84cc16', icon: 'PlusCircle', scope: 'GLOBAL' },
     ];
 
     for (const category of categories) {
@@ -55,20 +55,24 @@ async function main() {
     ];
 
     for (const rate of exchangeRates) {
-        await prisma.exchangeRate.upsert({
+        const existing = await prisma.exchangeRate.findFirst({
             where: {
-                fromCurrency_toCurrency_date: {
-                    fromCurrency: rate.fromCurrency,
-                    toCurrency: rate.toCurrency,
-                    date: today,
-                },
-            },
-            update: { rate: rate.rate },
-            create: {
-                ...rate,
+                fromCurrency: rate.fromCurrency,
+                toCurrency: rate.toCurrency,
                 date: today,
+                name: null,
             },
         });
+        if (existing) {
+            await prisma.exchangeRate.update({
+                where: { id: existing.id },
+                data: { rate: rate.rate },
+            });
+        } else {
+            await prisma.exchangeRate.create({
+                data: { ...rate, date: today },
+            });
+        }
     }
 
     console.log('✅ Exchange rates seeded');
@@ -164,9 +168,9 @@ async function main() {
         await prisma.saving.create({
             data: {
                 workspaceId: personalWorkspace.id,
-                amount: 50000,
+                name: 'Ahorro para emergencias',
+                targetAmount: 50000,
                 currency: 'ARS',
-                description: 'Ahorro para emergencias',
             },
         });
 
@@ -174,11 +178,11 @@ async function main() {
 
         // Create sample transactions
         const expenseCategory = await prisma.category.findFirst({
-            where: { name: 'Alimentación', scope: 'PERSONAL' },
+            where: { name: 'Alimentación', scope: 'GLOBAL' },
         });
 
         const incomeCategory = await prisma.category.findFirst({
-            where: { name: 'Salario', scope: 'PERSONAL' },
+            where: { name: 'Salario', scope: 'GLOBAL' },
         });
 
         if (expenseCategory && incomeCategory) {
