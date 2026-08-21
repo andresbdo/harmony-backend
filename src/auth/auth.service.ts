@@ -1,18 +1,22 @@
-import { Injectable, ConflictException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, ConflictException, UnauthorizedException, Logger } from '@nestjs/common';
 import { CreateUserDto } from 'src/users/dto/create-user.dto';
 import { LoginUserDto } from 'src/users/dto/login-user-dto';
 import { UsersService } from 'src/users/users.service';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { WorkspacesService } from 'src/workspaces/workspaces.service';
 import { hash, compare } from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { randomBytes } from 'crypto';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private usersService: UsersService,
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private workspacesService: WorkspacesService,
   ) {}
 
   async register(createUserDto: CreateUserDto) {
@@ -25,7 +29,6 @@ export class AuthService {
 
     const hashedPassword = await hash(password, 10);
 
-    // Crear usuario + workspace personal en una transacción atómica
     const newUser = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: { email, password: hashedPassword, name, lastName },
@@ -51,6 +54,19 @@ export class AuthService {
 
       return user;
     });
+
+    if (createUserDto.inviteToken) {
+      try {
+        await this.workspacesService.joinByToken(
+          createUserDto.inviteToken,
+          newUser.id,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Failed to join workspace via invite token: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
 
     const { password: _, ...result } = newUser;
     const access_token = await this.jwtService.signAsync({

@@ -7,9 +7,10 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModuleOptions } from '@nestjs/jwt';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { PrismaModule } from 'src/prisma/prisma.module';
+import { WorkspacesModule } from 'src/workspaces/workspaces.module';
 
 @Module({
-  imports: [UsersModule, PrismaModule, JwtModule.registerAsync({
+  imports: [UsersModule, PrismaModule, WorkspacesModule, JwtModule.registerAsync({
     imports: [ConfigModule],
     useFactory: async (config: ConfigService) => {
       const secret = config.get<string>('JWT_SECRET');
