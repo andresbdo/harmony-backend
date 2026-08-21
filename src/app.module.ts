@@ -15,7 +15,11 @@ import { BudgetsModule } from './budgets/budgets.module';
 import { CategoriesModule } from './categories/categories.module';
 import { HealthModule } from './health/health.module';
 import { EncryptionModule } from './common/encryption/encryption.module';
+import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { NotificationsModule } from './notifications/notifications.module';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
@@ -32,6 +36,10 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
     CategoriesModule,
     HealthModule,
     EncryptionModule,
+    ExchangeRatesModule,
+    NotificationsModule,
+    SubscriptionsModule,
+    ScheduleModule.forRoot(),
   ],
   controllers: [AppController],
   providers: [
