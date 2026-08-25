@@ -103,6 +103,96 @@ describe('DashboardService — getCalendarEvents (TASK-043)', () => {
     });
 });
 
+describe('DashboardService — getSummary balances', () => {
+    let service: DashboardService;
+    let prisma: any;
+
+    beforeEach(async () => {
+        prisma = makeMockPrisma({
+            workspaceMember: { findMany: jest.fn().mockResolvedValue([{ workspaceId: wsId }]) },
+            bankAccount: {
+                findMany: jest.fn().mockResolvedValue([
+                    { currentBalance: 1000, currency: 'ARS' },
+                    { currentBalance: 2000, currency: 'ARS' },
+                    { currentBalance: 50, currency: 'USD' },
+                ]),
+            },
+            exchangeRate: { findFirst: jest.fn().mockResolvedValue(null) },
+        });
+
+        const module: TestingModule = await Test.createTestingModule({
+            providers: [
+                DashboardService,
+                { provide: PrismaService, useValue: prisma },
+                {
+                    provide: EncryptionService,
+                    useValue: { encrypt: (v: string) => v, decrypt: (v: string) => v },
+                },
+            ],
+        }).compile();
+
+        service = module.get<DashboardService>(DashboardService);
+    });
+
+    it('sums multiple accounts sharing a currency into a single total instead of dropping them', async () => {
+        const summary = await service.getSummary(userId);
+
+        expect(summary.totalBalance).toEqual(
+            expect.arrayContaining([
+                { amount: 3000, currency: 'ARS' },
+                { amount: 50, currency: 'USD' },
+            ]),
+        );
+        expect(summary.totalBalance).toHaveLength(2);
+    });
+});
+
+describe('DashboardService — getSummary respects the user\'s chosen cotización', () => {
+    let service: DashboardService;
+    let prisma: any;
+    let findFirst: jest.Mock;
+
+    beforeEach(async () => {
+        findFirst = jest.fn().mockResolvedValue({ rate: 1000 });
+        prisma = makeMockPrisma({
+            workspaceMember: { findMany: jest.fn().mockResolvedValue([{ workspaceId: wsId }]) },
+            user: {
+                findUnique: jest.fn().mockResolvedValue({
+                    preferredCurrency: 'ARS',
+                    settings: { cotizacion1: 'blue' },
+                }),
+            },
+            bankAccount: {
+                findMany: jest.fn().mockResolvedValue([{ currentBalance: 100, currency: 'USD' }]),
+            },
+            exchangeRate: { findFirst },
+        });
+
+        const module: TestingModule = await Test.createTestingModule({
+            providers: [
+                DashboardService,
+                { provide: PrismaService, useValue: prisma },
+                {
+                    provide: EncryptionService,
+                    useValue: { encrypt: (v: string) => v, decrypt: (v: string) => v },
+                },
+            ],
+        }).compile();
+
+        service = module.get<DashboardService>(DashboardService);
+    });
+
+    it('looks up the ExchangeRate row matching the user\'s cotizacion1, not just any rate', async () => {
+        await service.getSummary(userId);
+
+        expect(findFirst).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: expect.objectContaining({ name: { equals: 'blue', mode: 'insensitive' } }),
+            }),
+        );
+    });
+});
+
 describe('DashboardService — saving goal pace calculation (TASK-042)', () => {
     it('on-track when total contributions match required monthly rate', () => {
         const targetAmount = 500000;

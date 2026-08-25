@@ -32,7 +32,7 @@ export class DashboardService {
 
         const user = await this.prisma.user.findUnique({
             where: { id: userId },
-            select: { preferredCurrency: true },
+            select: { preferredCurrency: true, settings: { select: { cotizacion1: true } } },
         });
 
         if (!user) {
@@ -40,6 +40,7 @@ export class DashboardService {
         }
 
         const preferredCurrency = user.preferredCurrency;
+        const cotizacion = user.settings?.cotizacion1 ?? 'oficial';
         const currentDate = new Date();
         const currentMonth = currentDate.getMonth() + 1;
         const currentYear = currentDate.getFullYear();
@@ -49,20 +50,30 @@ export class DashboardService {
             select: { currentBalance: true, currency: true },
         });
 
-        const totalBalance = await Promise.all(
-            bankAccounts.map(async (account) => {
-                const convertedAmount = await this.convertCurrency(
-                    parseFloat(account.currentBalance.toString()),
-                    account.currency,
-                    preferredCurrency,
-                    currentDate,
-                );
-                return {
-                    amount: convertedAmount,
-                    currency: account.currency,
-                };
-            }),
-        );
+        // Sum every account's balance into its own currency first (an account's amount
+        // must never be converted then re-labeled with its original currency), so a user
+        // with multiple accounts in the same currency sees one combined total per currency
+        // instead of only the first account found.
+        const balanceByCurrency = new Map<string, number>();
+        for (const account of bankAccounts) {
+            const amount = parseFloat(account.currentBalance.toString());
+            balanceByCurrency.set(
+                account.currency,
+                (balanceByCurrency.get(account.currency) ?? 0) + amount,
+            );
+        }
+        const totalBalance = Array.from(balanceByCurrency, ([currency, amount]) => ({ amount, currency }));
+
+        let totalBalanceAmount = 0;
+        for (const balance of totalBalance) {
+            totalBalanceAmount += await this.convertCurrency(
+                balance.amount,
+                balance.currency,
+                preferredCurrency,
+                currentDate,
+                cotizacion,
+            );
+        }
 
         const startOfMonth = new Date(Date.UTC(currentYear, currentMonth - 1, 1, 3, 0, 0));
         const startOfNextMonth = new Date(Date.UTC(currentYear, currentMonth, 1, 3, 0, 0));
@@ -91,6 +102,7 @@ export class DashboardService {
                 tx.currency,
                 preferredCurrency,
                 currentDate,
+                cotizacion,
             );
 
             if (tx.type === 'INCOME') {
@@ -106,6 +118,7 @@ export class DashboardService {
             currentYear,
             preferredCurrency,
             monthlyExpenses,
+            cotizacion,
         );
 
         const savings = await this.prisma.saving.findMany({
@@ -120,11 +133,11 @@ export class DashboardService {
                 saving.currency,
                 preferredCurrency,
                 currentDate,
+                cotizacion,
             );
             totalSavings += convertedAmount;
         }
 
-        const totalBalanceAmount = totalBalance.reduce((sum, b) => sum + b.amount, 0);
         const moneyAvailable = totalBalanceAmount - totalSavings;
 
         const previousMonth = currentMonth === 1 ? 12 : currentMonth - 1;
@@ -156,6 +169,7 @@ export class DashboardService {
                 tx.currency,
                 preferredCurrency,
                 currentDate,
+                cotizacion,
             );
 
             if (tx.type === 'INCOME') {
@@ -478,28 +492,34 @@ export class DashboardService {
         return events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     }
 
+    /**
+     * @param cotizacion Which named rate to use (e.g. 'oficial', 'blue', 'mep') — the user's
+     * chosen quote from settings. Falls back to any cached rate for the pair if none is found
+     * under that name, so a newly-picked cotización without cached data yet doesn't break totals.
+     */
     private async convertCurrency(
         amount: number,
         fromCurrency: string,
         toCurrency: string,
         date: Date,
+        cotizacion: string = 'oficial',
     ): Promise<number> {
         if (fromCurrency === toCurrency) {
             return amount;
         }
 
-        const exchangeRate = await this.prisma.exchangeRate.findFirst({
-            where: {
-                fromCurrency,
-                toCurrency,
-                date: {
-                    lte: date,
-                },
-            },
-            orderBy: {
-                date: 'desc',
-            },
-        });
+        const where = { fromCurrency, toCurrency, date: { lte: date } };
+        const exchangeRate =
+            // Case-insensitive: dolarapi returns capitalized names ("Oficial", "Blue"), but the
+            // default cotización (for users who never opened settings) is stored lowercase.
+            (await this.prisma.exchangeRate.findFirst({
+                where: { ...where, name: { equals: cotizacion, mode: 'insensitive' } },
+                orderBy: { date: 'desc' },
+            })) ??
+            (await this.prisma.exchangeRate.findFirst({
+                where,
+                orderBy: { date: 'desc' },
+            }));
 
         if (!exchangeRate) {
             console.warn(
@@ -517,6 +537,7 @@ export class DashboardService {
         year: number,
         currency: string,
         monthlyExpenses: number,
+        cotizacion: string,
     ): Promise<number> {
         const budget = await this.prisma.budget.findFirst({
             where: {
@@ -536,6 +557,7 @@ export class DashboardService {
             budget.currency,
             currency,
             new Date(),
+            cotizacion,
         );
 
         return budgetAmount - monthlyExpenses;
