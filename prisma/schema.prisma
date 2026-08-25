@@ -50,41 +50,42 @@ model ApiToken {
 }
 
 model Workspace {
-  id          String   @id @default(uuid())
-  name        String
-  color       String   @default("#1F6C9F")
-  ownerId     String
-  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  isPersonal  Boolean  @default(false)
-  inviteToken String?  @unique
-  cutoffDay   Int      @default(1)
-  cycle       WorkspaceCycle @default(MONTHLY)
-  weekStartDay Int      @default(1)
-  yearStartMonth Int     @default(1)
-  splitMode   SplitMode @default(MANUAL)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String         @id @default(uuid())
+  name           String
+  color          String         @default("#1F6C9F")
+  ownerId        String
+  owner          User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  isPersonal     Boolean        @default(false)
+  inviteToken    String?        @unique
+  cutoffDay      Int            @default(1)
+  cycle          WorkspaceCycle @default(MONTHLY)
+  weekStartDay   Int            @default(1)
+  yearStartMonth Int            @default(1)
+  splitMode      SplitMode      @default(MANUAL)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
-  members       WorkspaceMember[]
-  transactions  Transaction[]
-  categories    Category[]
-  bankAccounts  BankAccount[]
-  budgets       Budget[]
-  savings       Saving[]
-  subscriptions Subscription[]
-  settlements   WorkspaceSettlement[]
+  members              WorkspaceMember[]
+  transactions         Transaction[]
+  categories           Category[]
+  bankAccounts         BankAccount[]
+  budgets              Budget[]
+  savings              Saving[]
+  subscriptions        Subscription[]
+  settlements          WorkspaceSettlement[]
+  installmentPurchases InstallmentPurchase[]
 }
 
 model WorkspaceSettlement {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   periodStart DateTime
   periodEnd   DateTime
   balances    Json
-  status      String   @default("PENDING")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  status      String    @default("PENDING")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@unique([workspaceId, periodStart])
 }
@@ -102,7 +103,8 @@ model WorkspaceMember {
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
 
-  paidTransactions Transaction[] @relation("PaidBy")
+  paidTransactions         Transaction[]         @relation("PaidBy")
+  paidInstallmentPurchases InstallmentPurchase[] @relation("InstallmentPaidBy")
 }
 
 model Category {
@@ -119,8 +121,9 @@ model Category {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
-  transactions Transaction[]
-  Budget       Budget[]
+  transactions         Transaction[]
+  Budget               Budget[]
+  installmentPurchases InstallmentPurchase[]
 }
 
 model BankAccount {
@@ -129,15 +132,16 @@ model BankAccount {
   workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   name           String
   type           String
-  subtype        String?   // "SAVINGS" | "CHECKING" | null
+  subtype        String? // "SAVINGS" | "CHECKING" | null
   currency       String
   currentBalance Decimal
   initialBalance Decimal
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  cards        Card[]
-  transactions Transaction[]
+  cards                Card[]
+  transactions         Transaction[]
+  installmentPurchases InstallmentPurchase[]
 }
 
 model Card {
@@ -153,7 +157,8 @@ model Card {
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
 
-  transactions Transaction[]
+  transactions         Transaction[]
+  installmentPurchases InstallmentPurchase[]
 }
 
 model Budget {
@@ -174,15 +179,15 @@ model Budget {
 }
 
 model Saving {
-  id          String    @id @default(uuid())
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  name        String
+  id           String    @id @default(uuid())
+  workspaceId  String
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name         String
   targetAmount Decimal
-  targetDate  DateTime?
-  currency    String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  targetDate   DateTime?
+  currency     String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   transactions Transaction[]
 }
@@ -199,7 +204,7 @@ model Transaction {
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
 
   userId String?
-  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -215,6 +220,10 @@ model Transaction {
 
   subscriptionId String?
   subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  installmentPurchaseId String?
+  installmentPurchase   InstallmentPurchase? @relation(fields: [installmentPurchaseId], references: [id], onDelete: SetNull)
+  installmentNumber     Int?
 
   savingGoalId String?
   savingGoal   Saving? @relation(fields: [savingGoalId], references: [id], onDelete: SetNull)
@@ -242,6 +251,41 @@ model Subscription {
   transactions Transaction[]
 }
 
+model InstallmentPurchase {
+  id                String  @id @default(uuid())
+  description       String
+  installmentAmount Decimal
+  totalInstallments Int
+  installmentsPaid  Int     @default(1)
+  currency          String
+  type              String
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  paidByMemberId String?
+  paidByMember   WorkspaceMember? @relation("InstallmentPaidBy", fields: [paidByMemberId], references: [id], onDelete: SetNull)
+
+  paymentMethod String?
+  bankAccountId String?
+  bankAccount   BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+  cardId        String?
+  card          Card?        @relation(fields: [cardId], references: [id], onDelete: SetNull)
+
+  dateMode       String
+  fixedDay       Int?
+  nextChargeDate DateTime
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions Transaction[]
+}
+
 model Notification {
   id        String   @id @default(uuid())
   userId    String
@@ -254,10 +298,10 @@ model Notification {
 }
 
 model UserSettings {
-  id         String  @id @default(uuid())
-  userId     String  @unique
-  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  cotizacion1 String @default("oficial")
+  id          String  @id @default(uuid())
+  userId      String  @unique
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cotizacion1 String  @default("oficial")
   cotizacion2 String?
 }
 

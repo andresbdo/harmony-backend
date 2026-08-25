@@ -65,6 +65,13 @@ export class CreateTransactionDto {
     @IsObject()
     @IsOptional()
     recurrenceRule?: any;
+
+    @IsString()
+    @IsOptional()
+    installmentPurchaseId?: string;
+
+    @IsOptional()
+    installmentNumber?: number;
 }
 
 export class UpdateTransactionDto extends PartialType(OmitType(CreateTransactionDto, ['workspaceId'] as const)) { }

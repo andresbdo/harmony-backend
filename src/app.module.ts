@@ -19,6 +19,7 @@ import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
+import { InstallmentsModule } from './installments/installments.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -39,6 +40,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     ExchangeRatesModule,
     NotificationsModule,
     SubscriptionsModule,
+    InstallmentsModule,
     ScheduleModule.forRoot(),
   ],
   controllers: [AppController],

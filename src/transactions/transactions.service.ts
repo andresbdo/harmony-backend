@@ -58,7 +58,7 @@ export class TransactionsService {
         }
     }
 
-    private async recalculateBalance(bankAccountId: string): Promise<void> {
+    async recalculateBalance(bankAccountId: string): Promise<void> {
         const account = await this.prisma.bankAccount.findUnique({
             where: { id: bankAccountId },
             select: { initialBalance: true },
@@ -103,6 +103,8 @@ export class TransactionsService {
                 savingGoalId: dto.savingGoalId,
                 isRecurrent: dto.isRecurrent || false,
                 recurrenceRule: dto.recurrenceRule,
+                installmentPurchaseId: dto.installmentPurchaseId,
+                installmentNumber: dto.installmentNumber,
             },
         });
 
@@ -149,6 +151,7 @@ export class TransactionsService {
                 category: true,
                 workspace: true,
                 paidByMember: true,
+                installmentPurchase: { select: { totalInstallments: true } },
             },
             orderBy: { date: 'desc' },
         });
