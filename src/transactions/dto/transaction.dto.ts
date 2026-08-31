@@ -1,4 +1,4 @@
-import { IsNumber, IsString, IsEnum, IsOptional, IsDateString, IsBoolean, IsObject, ValidateIf, IsNotEmpty } from 'class-validator';
+import { IsNumber, IsString, IsEnum, IsOptional, IsDateString, IsBoolean, IsObject, ValidateIf, IsNotEmpty, IsArray, ArrayNotEmpty } from 'class-validator';
 import { PartialType, OmitType } from '@nestjs/mapped-types';
 
 export enum TransactionType {
@@ -75,6 +75,16 @@ export class CreateTransactionDto {
 }
 
 export class UpdateTransactionDto extends PartialType(OmitType(CreateTransactionDto, ['workspaceId'] as const)) { }
+
+export class ReconcileTransactionsDto {
+    @IsArray()
+    @ArrayNotEmpty()
+    @IsString({ each: true })
+    transactionIds: string[];
+
+    @IsBoolean()
+    reconciled: boolean;
+}
 
 export class AssignPaymentMethodDto {
     @IsEnum(PaymentMethod)

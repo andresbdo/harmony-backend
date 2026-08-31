@@ -157,7 +157,7 @@ export class WorkspacesService {
                 id: m.id,
                 responsibilityPercentage: parseFloat(m.responsibilityPercentage.toString()),
             })),
-            transactions.map(tx => ({
+            transactions.filter(tx => !tx.reconciled).map(tx => ({
                 amount: parseFloat(tx.amount.toString()),
                 paidByMemberId: tx.paidByMemberId,
             })),
@@ -246,7 +246,7 @@ export class WorkspacesService {
                 id: m.id,
                 responsibilityPercentage: m.responsibilityPercentage,
             })),
-            transactions.map(tx => ({
+            transactions.filter(tx => !tx.reconciled).map(tx => ({
                 amount: parseFloat(tx.amount.toString()),
                 paidByMemberId: tx.paidByMemberId,
             })),

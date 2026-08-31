@@ -231,6 +231,8 @@ model Transaction {
   isRecurrent    Boolean @default(false)
   recurrenceRule Json?
 
+  reconciled Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
