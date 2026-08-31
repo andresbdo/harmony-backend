@@ -236,6 +236,14 @@ export class TransactionsService {
         }));
     }
 
+    async reconcileMany(workspaceId: string, transactionIds: string[], reconciled: boolean) {
+        const { count } = await this.prisma.transaction.updateMany({
+            where: { id: { in: transactionIds }, workspaceId },
+            data: { reconciled },
+        });
+        return { updated: count };
+    }
+
     async assignPaymentMethod(
         transactionId: string,
         userId: string,

@@ -11,7 +11,7 @@ import {
     Query,
 } from '@nestjs/common';
 import { TransactionsService } from './transactions.service';
-import { AssignPaymentMethodDto, CreateTransactionDto, UpdateTransactionDto } from './dto/transaction.dto';
+import { AssignPaymentMethodDto, CreateTransactionDto, ReconcileTransactionsDto, UpdateTransactionDto } from './dto/transaction.dto';
 import { WorkspaceMemberGuard } from '../workspaces/workspace-member.guard';
 
 @Controller('transactions')
@@ -32,6 +32,11 @@ export class TransactionsController {
     @Get()
     findAll(@Request() req, @Query() filters: any) {
         return this.transactionsService.findAll(req.workspaceId, filters, req.user.id);
+    }
+
+    @Patch('reconcile')
+    reconcileMany(@Request() req, @Body() dto: ReconcileTransactionsDto) {
+        return this.transactionsService.reconcileMany(req.workspaceId, dto.transactionIds, dto.reconciled);
     }
 
     @Get(':id')
