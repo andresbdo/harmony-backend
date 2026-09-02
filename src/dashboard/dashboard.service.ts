@@ -363,6 +363,28 @@ export class DashboardService {
             }
         }
 
+        // Gastos fijos (subscriptions): only their next billing date is tracked, so
+        // (unlike recurrent transactions above) we can't roll it forward across months —
+        // it only shows up when that single date falls inside the requested window.
+        const subscriptions = await this.prisma.subscription.findMany({
+            where: {
+                workspaceId: { in: workspaceIds },
+                isActive: true,
+                nextBillingDate: { gte: from, lte: to },
+            },
+        });
+
+        for (const subscription of subscriptions) {
+            events.push({
+                id: `subscription-${subscription.id}-${subscription.nextBillingDate.getTime()}`,
+                date: subscription.nextBillingDate,
+                description: subscription.name,
+                amount: parseFloat(subscription.amount.toString()),
+                type: 'SUBSCRIPTION',
+                currency: subscription.currency,
+            });
+        }
+
         return events.sort((a, b) => a.date.getTime() - b.date.getTime());
     }
 
