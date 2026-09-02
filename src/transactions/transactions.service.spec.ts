@@ -162,7 +162,7 @@ describe('TransactionsService — getPendingPayments', () => {
 
 describe('TransactionsService — create with subscriptionId (TASK-040)', () => {
     let service: TransactionsService;
-    let prisma: { transaction: { create: jest.Mock; findMany: jest.Mock }; bankAccount: { findUnique: jest.Mock } };
+    let prisma: { transaction: { create: jest.Mock; findMany: jest.Mock }; bankAccount: { findUnique: jest.Mock }; category: { findUnique: jest.Mock } };
     let budgetsService: { checkExceeded: jest.Mock };
 
     beforeEach(async () => {
@@ -172,6 +172,9 @@ describe('TransactionsService — create with subscriptionId (TASK-040)', () => 
                 findMany: jest.fn().mockResolvedValue([]),
             },
             bankAccount: {
+                findUnique: jest.fn().mockResolvedValue(null),
+            },
+            category: {
                 findUnique: jest.fn().mockResolvedValue(null),
             },
         };

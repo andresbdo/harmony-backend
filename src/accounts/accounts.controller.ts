@@ -15,6 +15,7 @@ import {
     UpdateBankAccountDto,
     CreateCardDto,
     UpdateCardDto,
+    AdjustBalanceDto,
 } from './dto/account.dto';
 import { WorkspaceMemberGuard } from '../workspaces/workspace-member.guard';
 
@@ -46,6 +47,11 @@ export class AccountsController {
     @Delete(':id')
     removeAccount(@Request() req, @Param('id') id: string) {
         return this.accountsService.removeAccount(id, req.workspaceId);
+    }
+
+    @Post(':id/adjust-balance')
+    adjustBalance(@Request() req, @Param('id') id: string, @Body() dto: AdjustBalanceDto) {
+        return this.accountsService.adjustBalance(id, req.workspaceId, req.user.id, dto);
     }
 
     @Post('cards')

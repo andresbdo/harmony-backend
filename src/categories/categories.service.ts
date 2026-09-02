@@ -22,6 +22,7 @@ export class CategoriesService {
 
         const categories = await this.prisma.category.findMany({
             where: {
+                isSystem: false,
                 OR: [
                     { scope: 'GLOBAL' },
                     { scope: 'PERSONAL', userId },

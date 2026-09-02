@@ -1,13 +1,17 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EncryptionService } from '../common/encryption/encryption.service';
-import { CreateBankAccountDto, UpdateBankAccountDto, CreateCardDto, UpdateCardDto } from './dto/account.dto';
+import { TransactionsService } from '../transactions/transactions.service';
+import { CreateTransactionDto, TransactionType } from '../transactions/dto/transaction.dto';
+import { SYSTEM_CATEGORY_IDS } from '../categories/system-categories.constants';
+import { CreateBankAccountDto, UpdateBankAccountDto, CreateCardDto, UpdateCardDto, AdjustBalanceDto } from './dto/account.dto';
 
 @Injectable()
 export class AccountsService {
   constructor(
     private prisma: PrismaService,
     private encryption: EncryptionService,
+    private transactionsService: TransactionsService,
   ) {}
 
   private decryptAccount(account: any) {
@@ -70,6 +74,32 @@ export class AccountsService {
       data: { ...dto, name: dto.name ? this.encryption.encrypt(dto.name) : undefined },
     });
     return this.decryptAccount(updated);
+  }
+
+  async adjustBalance(id: string, workspaceId: string, userId: string, dto: AdjustBalanceDto) {
+    const account = await this.findOneAccount(id, workspaceId);
+    const currentBalance = parseFloat(account.currentBalance.toString());
+    const diff = dto.targetBalance - currentBalance;
+
+    if (diff === 0) return account;
+
+    const isIncrease = diff > 0;
+
+    await this.transactionsService.create(
+      workspaceId,
+      {
+        amount: Math.abs(diff),
+        currency: account.currency,
+        date: new Date().toISOString(),
+        type: isIncrease ? TransactionType.INCOME : TransactionType.EXPENSE,
+        categoryId: isIncrease ? SYSTEM_CATEGORY_IDS.ADJUST_BALANCE_INCOME : SYSTEM_CATEGORY_IDS.ADJUST_BALANCE_EXPENSE,
+        workspaceId,
+        bankAccountId: id,
+      } as CreateTransactionDto,
+      userId,
+    );
+
+    return this.findOneAccount(id, workspaceId);
   }
 
   async removeAccount(id: string, workspaceId: string) {
