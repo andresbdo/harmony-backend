@@ -74,6 +74,21 @@ model Workspace {
   subscriptions        Subscription[]
   settlements          WorkspaceSettlement[]
   installmentPurchases InstallmentPurchase[]
+  expenseGroups        ExpenseGroup[]
+}
+
+model ExpenseGroup {
+  id          String    @id @default(uuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  icon        String
+  color       String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  categories   Category[]
+  transactions Transaction[]
 }
 
 model WorkspaceSettlement {
@@ -114,12 +129,17 @@ model Category {
   color       String
   icon        String
   scope       String
+  isSystem    Boolean    @default(false)
   workspaceId String?
   workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   userId      String?
   user        User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+
+  expenseGroupId String?
+  expenseGroup   ExpenseGroup? @relation(fields: [expenseGroupId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   transactions         Transaction[]
   Budget               Budget[]
@@ -136,6 +156,7 @@ model BankAccount {
   currency       String
   currentBalance Decimal
   initialBalance Decimal
+  balanceVisible Boolean   @default(true)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -227,6 +248,9 @@ model Transaction {
 
   savingGoalId String?
   savingGoal   Saving? @relation(fields: [savingGoalId], references: [id], onDelete: SetNull)
+
+  expenseGroupId String?
+  expenseGroup   ExpenseGroup? @relation(fields: [expenseGroupId], references: [id], onDelete: SetNull)
 
   isRecurrent    Boolean @default(false)
   recurrenceRule Json?

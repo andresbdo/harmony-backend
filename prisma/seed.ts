@@ -41,6 +41,23 @@ async function main() {
 
     console.log('✅ Default categories seeded');
 
+    // 1b. Seed system category used for balance adjustments (hidden from pickers/reports)
+    const systemCategories = [
+        { id: 'system-adjust-balance-expense', name: 'Ajuste de saldo', type: 'EXPENSE', color: '#6E7681', icon: 'Scale', scope: 'GLOBAL', isSystem: true },
+        { id: 'system-adjust-balance-income', name: 'Ajuste de saldo', type: 'INCOME', color: '#6E7681', icon: 'Scale', scope: 'GLOBAL', isSystem: true },
+    ];
+
+    for (const category of systemCategories) {
+        const { id, ...data } = category;
+        await prisma.category.upsert({
+            where: { id },
+            update: {},
+            create: { id, ...data },
+        });
+    }
+
+    console.log('✅ System categories seeded');
+
     // 2. Seed exchange rates
     const today = new Date();
     today.setHours(0, 0, 0, 0);
