@@ -15,6 +15,7 @@ import { BudgetsModule } from './budgets/budgets.module';
 import { CategoriesModule } from './categories/categories.module';
 import { HealthModule } from './health/health.module';
 import { EncryptionModule } from './common/encryption/encryption.module';
+import { HolidaysModule } from './common/holidays/holidays.module';
 import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -38,6 +39,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     CategoriesModule,
     HealthModule,
     EncryptionModule,
+    HolidaysModule,
     ExchangeRatesModule,
     NotificationsModule,
     SubscriptionsModule,

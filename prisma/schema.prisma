@@ -344,3 +344,13 @@ model ExchangeRate {
 
   @@unique([fromCurrency, toCurrency, date, name])
 }
+
+model Holiday {
+  id        String   @id @default(uuid())
+  date      DateTime @unique
+  name      String
+  type      String
+  createdAt DateTime @default(now())
+
+  @@index([date])
+}

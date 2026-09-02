@@ -2,6 +2,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DashboardService } from './dashboard.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { EncryptionService } from '../common/encryption/encryption.service';
+import { HolidaysService } from '../common/holidays/holidays.service';
+
+const mockHolidaysService = {
+    isBusinessDay: jest.fn().mockResolvedValue(true),
+    nextBusinessDay: jest.fn().mockImplementation((date: Date) => Promise.resolve(date)),
+};
 
 const now = new Date();
 const month = now.getMonth() + 1;
@@ -75,6 +81,7 @@ describe('DashboardService — getCalendarEvents (TASK-043)', () => {
                     provide: EncryptionService,
                     useValue: { encrypt: (v: string) => v, decrypt: (v: string) => v },
                 },
+                { provide: HolidaysService, useValue: mockHolidaysService },
             ],
         }).compile();
 
@@ -128,6 +135,7 @@ describe('DashboardService — getSummary balances', () => {
                     provide: EncryptionService,
                     useValue: { encrypt: (v: string) => v, decrypt: (v: string) => v },
                 },
+                { provide: HolidaysService, useValue: mockHolidaysService },
             ],
         }).compile();
 
@@ -176,6 +184,7 @@ describe('DashboardService — getSummary respects the user\'s chosen cotizació
                     provide: EncryptionService,
                     useValue: { encrypt: (v: string) => v, decrypt: (v: string) => v },
                 },
+                { provide: HolidaysService, useValue: mockHolidaysService },
             ],
         }).compile();
 

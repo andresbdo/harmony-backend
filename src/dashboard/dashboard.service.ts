@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EncryptionService } from '../common/encryption/encryption.service';
+import { HolidaysService } from '../common/holidays/holidays.service';
+import { daysInMonth } from '../installments/installment-dates.util';
 import {
     DashboardSummaryDto,
     RecentTransactionDto,
@@ -14,6 +16,7 @@ export class DashboardService {
     constructor(
         private prisma: PrismaService,
         private encryption: EncryptionService,
+        private holidays: HolidaysService,
     ) { }
 
     private async getUserWorkspaceIds(userId: string): Promise<string[]> {
@@ -260,16 +263,15 @@ export class DashboardService {
             const cardName = this.encryption.decrypt(card.name);
             const currentDate = new Date(from);
             while (currentDate <= to) {
-                const statementCloseDate = new Date(
-                    currentDate.getFullYear(),
-                    currentDate.getMonth(),
-                    card.statementCloseDay,
-                );
-                const dueDate = new Date(
-                    currentDate.getFullYear(),
-                    currentDate.getMonth(),
-                    card.dueDay,
-                );
+                const year = currentDate.getFullYear();
+                const month = currentDate.getMonth();
+                const closeDay = Math.min(card.statementCloseDay, daysInMonth(year, month));
+                const dueDay = Math.min(card.dueDay, daysInMonth(year, month));
+
+                // Los bancos corren el cierre/vencimiento al próximo día hábil
+                // cuando cae en fin de semana o feriado.
+                const statementCloseDate = await this.holidays.nextBusinessDay(new Date(year, month, closeDay));
+                const dueDate = await this.holidays.nextBusinessDay(new Date(year, month, dueDay));
 
                 if (statementCloseDate >= from && statementCloseDate <= to) {
                     events.push({
@@ -469,7 +471,12 @@ export class DashboardService {
 
             for (const account of userBankAccounts) {
                 for (const card of account.cards) {
-                    const dueDate = new Date(year, month - 1, card.dueDay);
+                    const dueDay = Math.min(card.dueDay, daysInMonth(year, month - 1));
+                    const closeDay = Math.min(card.statementCloseDay, daysInMonth(year, month - 1));
+
+                    // Los bancos corren el cierre/vencimiento al próximo día hábil
+                    // cuando cae en fin de semana o feriado.
+                    const dueDate = await this.holidays.nextBusinessDay(new Date(year, month - 1, dueDay));
                     if (dueDate >= startDate && dueDate <= endDate) {
                         events.push({
                             date: dueDate.toISOString(),
@@ -479,7 +486,7 @@ export class DashboardService {
                         });
                     }
 
-                    const closeDate = new Date(year, month - 1, card.statementCloseDay);
+                    const closeDate = await this.holidays.nextBusinessDay(new Date(year, month - 1, closeDay));
                     if (closeDate >= startDate && closeDate <= endDate) {
                         events.push({
                             date: closeDate.toISOString(),
