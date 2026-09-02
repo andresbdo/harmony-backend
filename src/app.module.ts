@@ -20,6 +20,7 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { InstallmentsModule } from './installments/installments.module';
+import { ExpenseGroupsModule } from './expense-groups/expense-groups.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -41,6 +42,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     NotificationsModule,
     SubscriptionsModule,
     InstallmentsModule,
+    ExpenseGroupsModule,
     ScheduleModule.forRoot(),
   ],
   controllers: [AppController],

@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateTransactionDto, UpdateTransactionDto, PaymentMethod } from './dto/transaction.dto';
+import { CreateTransactionDto, UpdateTransactionDto, PaymentMethod, TransactionType } from './dto/transaction.dto';
 import { EncryptionService } from '../common/encryption/encryption.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { BudgetsService } from '../budgets/budgets.service';
@@ -84,8 +84,24 @@ export class TransactionsService {
         });
     }
 
+    private async resolveExpenseGroupId(
+        categoryId: string | undefined,
+        explicitExpenseGroupId: string | null | undefined,
+        type: string | undefined,
+    ): Promise<string | null | undefined> {
+        if (explicitExpenseGroupId !== undefined) return explicitExpenseGroupId;
+        if (type !== TransactionType.EXPENSE || !categoryId) return undefined;
+
+        const category = await this.prisma.category.findUnique({
+            where: { id: categoryId },
+            select: { expenseGroupId: true },
+        });
+        return category?.expenseGroupId ?? null;
+    }
+
     async create(workspaceId: string, dto: CreateTransactionDto, userId: string) {
         await this.validatePaymentMethod(dto, workspaceId);
+        const expenseGroupId = await this.resolveExpenseGroupId(dto.categoryId, dto.expenseGroupId, dto.type);
 
         const transaction = await this.prisma.transaction.create({
             data: {
@@ -105,6 +121,7 @@ export class TransactionsService {
                 recurrenceRule: dto.recurrenceRule,
                 installmentPurchaseId: dto.installmentPurchaseId,
                 installmentNumber: dto.installmentNumber,
+                expenseGroupId: expenseGroupId ?? null,
             },
         });
 
@@ -184,6 +201,11 @@ export class TransactionsService {
     async update(id: string, workspaceId: string, updateTransactionDto: UpdateTransactionDto) {
         const existing = await this.findOne(id, workspaceId);
         await this.validatePaymentMethod(updateTransactionDto, workspaceId);
+        const expenseGroupId = await this.resolveExpenseGroupId(
+            updateTransactionDto.categoryId,
+            updateTransactionDto.expenseGroupId,
+            updateTransactionDto.type ?? existing.type,
+        );
 
         const updated = await this.prisma.transaction.update({
             where: { id },
@@ -193,6 +215,7 @@ export class TransactionsService {
                     ? this.encryption.encrypt(updateTransactionDto.description)
                     : undefined,
                 date: updateTransactionDto.date ? new Date(updateTransactionDto.date) : undefined,
+                expenseGroupId,
             },
         });
 

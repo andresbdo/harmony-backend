@@ -72,6 +72,10 @@ export class CreateTransactionDto {
 
     @IsOptional()
     installmentNumber?: number;
+
+    @IsString()
+    @IsOptional()
+    expenseGroupId?: string | null;
 }
 
 export class UpdateTransactionDto extends PartialType(OmitType(CreateTransactionDto, ['workspaceId'] as const)) { }
