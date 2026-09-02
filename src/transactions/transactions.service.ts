@@ -137,6 +137,7 @@ export class TransactionsService {
                 type: dto.type,
                 categoryId: dto.categoryId,
                 workspaceId,
+                userId,
                 paidByMemberId: dto.paidByMemberId,
                 paymentMethod: dto.paymentMethod || null,
                 bankAccountId: dto.bankAccountId,
