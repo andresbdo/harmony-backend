@@ -23,9 +23,36 @@ export class ExpenseGroupsService {
     }
 
     async findOneOrThrow(id: string, workspaceId: string) {
-        const group = await this.prisma.expenseGroup.findFirst({ where: { id, workspaceId } });
+        const group = await this.prisma.expenseGroup.findFirst({
+            where: { id, workspaceId },
+            include: { categories: { select: { id: true, name: true } } },
+        });
         if (!group) throw new NotFoundException('Grupo de gastos no encontrado');
         return group;
+    }
+
+    private async enrichWithPeriod<T extends { id: string }>(group: T, workspaceId: string, bounds: Awaited<ReturnType<typeof getCurrentPeriodBounds>>) {
+        const transactions = await this.prisma.transaction.findMany({
+            where: {
+                workspaceId,
+                expenseGroupId: group.id,
+                type: 'EXPENSE',
+                ...(bounds ? { date: { gte: bounds.periodStart, lte: bounds.periodEnd } } : {}),
+            },
+            select: { amount: true, reconciled: true },
+        });
+
+        const total = transactions.reduce((sum, t) => sum + parseFloat(t.amount.toString()), 0);
+        const reconciled = transactions.length > 0 && transactions.every(t => t.reconciled);
+
+        return {
+            ...group,
+            periodStart: bounds?.periodStart ?? null,
+            periodEnd: bounds?.periodEnd ?? null,
+            periodTotal: total,
+            transactionCount: transactions.length,
+            reconciled,
+        };
     }
 
     async findAll(workspaceId: string) {
@@ -36,36 +63,13 @@ export class ExpenseGroupsService {
         });
 
         const bounds = await this.getPeriodBounds(workspaceId);
-
-        return Promise.all(
-            groups.map(async (group) => {
-                const transactions = await this.prisma.transaction.findMany({
-                    where: {
-                        workspaceId,
-                        expenseGroupId: group.id,
-                        type: 'EXPENSE',
-                        ...(bounds ? { date: { gte: bounds.periodStart, lte: bounds.periodEnd } } : {}),
-                    },
-                    select: { amount: true, reconciled: true },
-                });
-
-                const total = transactions.reduce((sum, t) => sum + parseFloat(t.amount.toString()), 0);
-                const reconciled = transactions.length > 0 && transactions.every(t => t.reconciled);
-
-                return {
-                    ...group,
-                    periodStart: bounds?.periodStart ?? null,
-                    periodEnd: bounds?.periodEnd ?? null,
-                    periodTotal: total,
-                    transactionCount: transactions.length,
-                    reconciled,
-                };
-            }),
-        );
+        return Promise.all(groups.map((group) => this.enrichWithPeriod(group, workspaceId, bounds)));
     }
 
     async findOne(id: string, workspaceId: string) {
-        return this.findOneOrThrow(id, workspaceId);
+        const group = await this.findOneOrThrow(id, workspaceId);
+        const bounds = await this.getPeriodBounds(workspaceId);
+        return this.enrichWithPeriod(group, workspaceId, bounds);
     }
 
     async update(id: string, workspaceId: string, dto: UpdateExpenseGroupDto) {
@@ -78,7 +82,7 @@ export class ExpenseGroupsService {
         return this.prisma.expenseGroup.delete({ where: { id } });
     }
 
-    async assignCategories(id: string, workspaceId: string, dto: AssignCategoriesDto) {
+    async assignCategories(id: string, workspaceId: string, userId: string, dto: AssignCategoriesDto) {
         await this.findOneOrThrow(id, workspaceId);
 
         const categories = await this.prisma.category.findMany({
@@ -86,10 +90,14 @@ export class ExpenseGroupsService {
         });
 
         const invalid = categories.filter(
-            c => !(c.scope === 'WORKSPACE' && c.workspaceId === workspaceId),
+            c => !(
+                c.scope === 'GLOBAL' ||
+                (c.scope === 'PERSONAL' && c.userId === userId) ||
+                (c.scope === 'WORKSPACE' && c.workspaceId === workspaceId)
+            ),
         );
         if (invalid.length > 0 || categories.length !== dto.categoryIds.length) {
-            throw new BadRequestException('Solo categorías del workspace pueden asignarse a un grupo de gastos');
+            throw new BadRequestException('Categoría inválida para este workspace');
         }
 
         await this.prisma.category.updateMany({

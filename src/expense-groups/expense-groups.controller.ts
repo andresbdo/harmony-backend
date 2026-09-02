@@ -45,7 +45,7 @@ export class ExpenseGroupsController {
 
     @Patch(':id/categories')
     assignCategories(@Request() req, @Param('id') id: string, @Body() dto: AssignCategoriesDto) {
-        return this.expenseGroupsService.assignCategories(id, req.workspaceId, dto);
+        return this.expenseGroupsService.assignCategories(id, req.workspaceId, req.user.id, dto);
     }
 
     @Delete(':id/categories/:categoryId')
