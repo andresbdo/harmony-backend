@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsEnum, IsOptional, IsNotEmpty, IsIn } from 'class-validator';
+import { IsString, IsNumber, IsEnum, IsOptional, IsNotEmpty, IsIn, IsBoolean } from 'class-validator';
 import { PartialType, OmitType } from '@nestjs/mapped-types';
 
 export class CreateBankAccountDto {
@@ -22,9 +22,18 @@ export class CreateBankAccountDto {
     @IsString()
     @IsIn(['SAVINGS', 'CHECKING'])
     subtype?: string;
+
+    @IsOptional()
+    @IsBoolean()
+    balanceVisible?: boolean;
 }
 
-export class UpdateBankAccountDto extends PartialType(OmitType(CreateBankAccountDto, ['workspaceId'] as const)) { }
+export class UpdateBankAccountDto extends PartialType(OmitType(CreateBankAccountDto, ['workspaceId', 'initialBalance'] as const)) { }
+
+export class AdjustBalanceDto {
+    @IsNumber()
+    targetBalance: number;
+}
 
 export class CreateCardDto {
     @IsString()

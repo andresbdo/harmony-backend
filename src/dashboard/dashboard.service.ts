@@ -85,6 +85,7 @@ export class DashboardService {
                     gte: startOfMonth,
                     lt: startOfNextMonth,
                 },
+                category: { isSystem: false },
             },
             select: {
                 amount: true,
@@ -152,6 +153,7 @@ export class DashboardService {
                     gte: startOfPreviousMonth,
                     lt: startOfMonth,
                 },
+                category: { isSystem: false },
             },
             select: {
                 amount: true,
