@@ -40,6 +40,7 @@ export class AccountWithCardsDto {
     type: string;
     currency: string;
     currentBalance: number;
+    balanceVisible: boolean;
     cards: {
         id: string;
         name: string;

@@ -46,7 +46,7 @@ export class DashboardService {
         const currentYear = currentDate.getFullYear();
 
         const bankAccounts = await this.prisma.bankAccount.findMany({
-            where: { workspaceId: { in: workspaceIds } },
+            where: { workspaceId: { in: workspaceIds }, balanceVisible: true },
             select: { currentBalance: true, currency: true },
         });
 
@@ -358,6 +358,7 @@ export class DashboardService {
             type: account.type,
             currency: account.currency,
             currentBalance: parseFloat(account.currentBalance.toString()),
+            balanceVisible: account.balanceVisible,
             cards: account.cards.map((card) => ({
                 id: card.id,
                 name: this.encryption.decrypt(card.name),
