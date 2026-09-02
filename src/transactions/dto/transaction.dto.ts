@@ -1,5 +1,6 @@
 import { IsNumber, IsString, IsEnum, IsOptional, IsDateString, IsBoolean, IsObject, ValidateIf, IsNotEmpty, IsArray, ArrayNotEmpty } from 'class-validator';
 import { PartialType, OmitType } from '@nestjs/mapped-types';
+import { SubscriptionFrequency } from '../../subscriptions/dto/subscription.dto';
 
 export enum TransactionType {
     INCOME = 'INCOME',
@@ -76,6 +77,11 @@ export class CreateTransactionDto {
     @IsString()
     @IsOptional()
     expenseGroupId?: string | null;
+
+    /** Si viene, la transacción crea (y queda linkeada a) una Subscription nueva con esta frecuencia. */
+    @IsEnum(SubscriptionFrequency)
+    @IsOptional()
+    subscriptionFrequency?: SubscriptionFrequency;
 }
 
 export class UpdateTransactionDto extends PartialType(OmitType(CreateTransactionDto, ['workspaceId'] as const)) { }

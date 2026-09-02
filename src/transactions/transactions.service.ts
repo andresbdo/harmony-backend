@@ -99,9 +99,32 @@ export class TransactionsService {
         return category?.expenseGroupId ?? null;
     }
 
+    private nextBillingDateFrom(date: Date, frequency: string): Date {
+        const next = new Date(date);
+        if (frequency === 'MONTHLY') next.setMonth(next.getMonth() + 1);
+        else if (frequency === 'WEEKLY') next.setDate(next.getDate() + 7);
+        else if (frequency === 'YEARLY') next.setFullYear(next.getFullYear() + 1);
+        return next;
+    }
+
     async create(workspaceId: string, dto: CreateTransactionDto, userId: string) {
         await this.validatePaymentMethod(dto, workspaceId);
         const expenseGroupId = await this.resolveExpenseGroupId(dto.categoryId, dto.expenseGroupId, dto.type);
+
+        let subscriptionId: string | undefined;
+        if (dto.subscriptionFrequency) {
+            const subscription = await this.prisma.subscription.create({
+                data: {
+                    name: dto.description || 'Suscripción',
+                    amount: dto.amount,
+                    currency: dto.currency,
+                    frequency: dto.subscriptionFrequency,
+                    nextBillingDate: this.nextBillingDateFrom(new Date(dto.date), dto.subscriptionFrequency),
+                    workspaceId,
+                },
+            });
+            subscriptionId = subscription.id;
+        }
 
         const transaction = await this.prisma.transaction.create({
             data: {
@@ -122,6 +145,7 @@ export class TransactionsService {
                 installmentPurchaseId: dto.installmentPurchaseId,
                 installmentNumber: dto.installmentNumber,
                 expenseGroupId: expenseGroupId ?? null,
+                subscriptionId,
             },
         });
 
