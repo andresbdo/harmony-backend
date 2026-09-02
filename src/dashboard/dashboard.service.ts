@@ -19,6 +19,29 @@ export class DashboardService {
         private holidays: HolidaysService,
     ) { }
 
+    /**
+     * Fecha real de cierre/vencimiento para el ciclo de una tarjeta cuyo
+     * resumen cierra en `closeMonth` (0-indexed) de `closeYear`. Si el día
+     * de vencimiento es menor o igual al de cierre (ej. cierra el 24,
+     * vence el 5), el vencimiento cae en el mes siguiente al cierre, no en
+     * el mismo — si no, "vence el 5" del mismo mes quedaría antes que el
+     * cierre que lo generó. Ambas fechas se corren al próximo día hábil.
+     */
+    private async cardCycleDates(
+        card: { statementCloseDay: number; dueDay: number },
+        closeYear: number,
+        closeMonth: number,
+    ): Promise<{ closeDate: Date; dueDate: Date }> {
+        const closeDay = Math.min(card.statementCloseDay, daysInMonth(closeYear, closeMonth));
+        const closeDate = await this.holidays.nextBusinessDay(new Date(closeYear, closeMonth, closeDay));
+
+        const dueMonth = closeMonth + (card.dueDay <= card.statementCloseDay ? 1 : 0);
+        const dueDay = Math.min(card.dueDay, daysInMonth(closeYear, dueMonth));
+        const dueDate = await this.holidays.nextBusinessDay(new Date(closeYear, dueMonth, dueDay));
+
+        return { closeDate, dueDate };
+    }
+
     private async getUserWorkspaceIds(userId: string): Promise<string[]> {
         const memberships = await this.prisma.workspaceMember.findMany({
             where: { userId },
@@ -261,17 +284,17 @@ export class DashboardService {
 
         for (const card of cards) {
             const cardName = this.encryption.decrypt(card.name);
-            const currentDate = new Date(from);
-            while (currentDate <= to) {
-                const year = currentDate.getFullYear();
-                const month = currentDate.getMonth();
-                const closeDay = Math.min(card.statementCloseDay, daysInMonth(year, month));
-                const dueDay = Math.min(card.dueDay, daysInMonth(year, month));
-
-                // Los bancos corren el cierre/vencimiento al próximo día hábil
-                // cuando cae en fin de semana o feriado.
-                const statementCloseDate = await this.holidays.nextBusinessDay(new Date(year, month, closeDay));
-                const dueDate = await this.holidays.nextBusinessDay(new Date(year, month, dueDay));
+            // Arranca un mes antes de `from`: el vencimiento de un ciclo puede
+            // caer un mes después de su cierre, así que el cierre que lo generó
+            // puede estar fuera de la ventana pedida.
+            const currentDate = new Date(from.getFullYear(), from.getMonth() - 1, 1);
+            const iterEnd = new Date(to.getFullYear(), to.getMonth() + 1, 1);
+            while (currentDate <= iterEnd) {
+                const { closeDate: statementCloseDate, dueDate } = await this.cardCycleDates(
+                    card,
+                    currentDate.getFullYear(),
+                    currentDate.getMonth(),
+                );
 
                 if (statementCloseDate >= from && statementCloseDate <= to) {
                     events.push({
@@ -471,29 +494,29 @@ export class DashboardService {
 
             for (const account of userBankAccounts) {
                 for (const card of account.cards) {
-                    const dueDay = Math.min(card.dueDay, daysInMonth(year, month - 1));
-                    const closeDay = Math.min(card.statementCloseDay, daysInMonth(year, month - 1));
+                    // El vencimiento de un ciclo puede caer un mes después de su
+                    // cierre (ej. cierra el 24, vence el 5 del mes que viene), así
+                    // que el cierre que lo generó puede ser del mes anterior al pedido.
+                    for (const closeMonthOffset of [-1, 0]) {
+                        const { closeDate, dueDate } = await this.cardCycleDates(card, year, month - 1 + closeMonthOffset);
 
-                    // Los bancos corren el cierre/vencimiento al próximo día hábil
-                    // cuando cae en fin de semana o feriado.
-                    const dueDate = await this.holidays.nextBusinessDay(new Date(year, month - 1, dueDay));
-                    if (dueDate >= startDate && dueDate <= endDate) {
-                        events.push({
-                            date: dueDate.toISOString(),
-                            type: 'CARD_DUE',
-                            title: this.encryption.decrypt(card.name) + ' due',
-                            color: '#EF4444',
-                        });
-                    }
+                        if (dueDate >= startDate && dueDate <= endDate) {
+                            events.push({
+                                date: dueDate.toISOString(),
+                                type: 'CARD_DUE',
+                                title: this.encryption.decrypt(card.name) + ' due',
+                                color: '#EF4444',
+                            });
+                        }
 
-                    const closeDate = await this.holidays.nextBusinessDay(new Date(year, month - 1, closeDay));
-                    if (closeDate >= startDate && closeDate <= endDate) {
-                        events.push({
-                            date: closeDate.toISOString(),
-                            type: 'CARD_CLOSE',
-                            title: this.encryption.decrypt(card.name) + ' close',
-                            color: '#F97316',
-                        });
+                        if (closeMonthOffset === 0 && closeDate >= startDate && closeDate <= endDate) {
+                            events.push({
+                                date: closeDate.toISOString(),
+                                type: 'CARD_CLOSE',
+                                title: this.encryption.decrypt(card.name) + ' close',
+                                color: '#F97316',
+                            });
+                        }
                     }
                 }
             }
