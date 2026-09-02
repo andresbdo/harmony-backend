@@ -85,16 +85,16 @@ export class UsersService {
       where: { userId },
       create: { userId, cotizacion1: 'oficial' },
       update: {},
-      select: { cotizacion1: true, cotizacion2: true },
+      select: { cotizacion1: true, cotizacion2: true, favoriteCurrencies: true },
     });
   }
 
   async updateSettings(userId: string, dto: UpdateUserSettingsDto) {
     return this.prisma.userSettings.upsert({
       where: { userId },
-      create: { userId, ...dto },
+      create: { userId, cotizacion1: 'oficial', ...dto },
       update: { ...dto },
-      select: { cotizacion1: true, cotizacion2: true },
+      select: { cotizacion1: true, cotizacion2: true, favoriteCurrencies: true },
     });
   }
 }

@@ -324,11 +324,12 @@ model Notification {
 }
 
 model UserSettings {
-  id          String  @id @default(uuid())
-  userId      String  @unique
-  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  cotizacion1 String  @default("oficial")
-  cotizacion2 String?
+  id                 String   @id @default(uuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cotizacion1        String   @default("oficial")
+  cotizacion2        String?
+  favoriteCurrencies String[] @default([])
 }
 
 model ExchangeRate {
