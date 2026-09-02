@@ -275,3 +275,112 @@ describe('TransactionsService — create with SAVING type (TASK-041)', () => {
         );
     });
 });
+
+describe('TransactionsService — payment method validation on shared workspaces', () => {
+    let service: TransactionsService;
+    let prisma: {
+        transaction: { create: jest.Mock; findMany: jest.Mock };
+        bankAccount: { findFirst: jest.Mock; findUnique: jest.Mock; update: jest.Mock };
+        card: { findFirst: jest.Mock };
+        category: { findUnique: jest.Mock };
+    };
+    let budgetsService: { checkExceeded: jest.Mock };
+
+    beforeEach(async () => {
+        prisma = {
+            transaction: {
+                create: jest.fn().mockResolvedValue(makeTx({ description: null })),
+                findMany: jest.fn().mockResolvedValue([]),
+            },
+            bankAccount: {
+                findFirst: jest.fn(),
+                findUnique: jest.fn().mockResolvedValue(null),
+                update: jest.fn(),
+            },
+            card: {
+                findFirst: jest.fn(),
+            },
+            category: {
+                findUnique: jest.fn().mockResolvedValue(null),
+            },
+        };
+        budgetsService = { checkExceeded: jest.fn().mockResolvedValue({ exceeded: false, budget: null, totalSpent: 0 }) };
+
+        const module: TestingModule = await Test.createTestingModule({
+            providers: [
+                TransactionsService,
+                { provide: PrismaService, useValue: prisma },
+                { provide: EncryptionService, useValue: { encrypt: (v: string) => v, decrypt: (v: string) => v } },
+                { provide: NotificationsService, useValue: { create: jest.fn() } },
+                { provide: BudgetsService, useValue: budgetsService },
+            ],
+        }).compile();
+
+        service = module.get<TransactionsService>(TransactionsService);
+    });
+
+    it('accepts a bankAccountId from the payer personal workspace when the expense targets a shared workspace', async () => {
+        prisma.bankAccount.findFirst.mockResolvedValue({ id: 'acc-123' });
+
+        const dto: any = {
+            amount: 100,
+            currency: 'ARS',
+            date: new Date().toISOString(),
+            type: 'EXPENSE',
+            categoryId: 'cat-1',
+            paymentMethod: 'BANK_ACCOUNT',
+            bankAccountId: 'acc-123',
+        };
+
+        await service.create('shared-ws-1', dto, 'user-A');
+
+        expect(prisma.bankAccount.findFirst).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: { id: 'acc-123', workspace: { isPersonal: true, ownerId: 'user-A' } },
+            }),
+        );
+        expect(prisma.transaction.create).toHaveBeenCalled();
+    });
+
+    it('rejects a bankAccountId that does not belong to the requesting user', async () => {
+        prisma.bankAccount.findFirst.mockResolvedValue(null);
+
+        const dto: any = {
+            amount: 100,
+            currency: 'ARS',
+            date: new Date().toISOString(),
+            type: 'EXPENSE',
+            categoryId: 'cat-1',
+            paymentMethod: 'BANK_ACCOUNT',
+            bankAccountId: 'not-mine',
+        };
+
+        await expect(service.create('shared-ws-1', dto, 'user-A')).rejects.toThrow(
+            'bankAccountId does not belong to you',
+        );
+        expect(prisma.transaction.create).not.toHaveBeenCalled();
+    });
+
+    it('accepts a cardId from the payer personal workspace when the expense targets a shared workspace', async () => {
+        prisma.card.findFirst.mockResolvedValue({ id: 'card-1' });
+
+        const dto: any = {
+            amount: 100,
+            currency: 'ARS',
+            date: new Date().toISOString(),
+            type: 'EXPENSE',
+            categoryId: 'cat-1',
+            paymentMethod: 'CARD',
+            cardId: 'card-1',
+        };
+
+        await service.create('shared-ws-1', dto, 'user-A');
+
+        expect(prisma.card.findFirst).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: { id: 'card-1', linkedBankAccount: { workspace: { isPersonal: true, ownerId: 'user-A' } } },
+            }),
+        );
+        expect(prisma.transaction.create).toHaveBeenCalled();
+    });
+});

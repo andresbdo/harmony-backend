@@ -61,7 +61,7 @@ export class AccountsController {
 
     @Get('cards/all')
     findAllCards(@Request() req) {
-        return this.accountsService.findAllCards(req.workspaceId);
+        return this.accountsService.findAllCards(req.user.id);
     }
 
     @Get('cards/:id')

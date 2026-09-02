@@ -47,8 +47,10 @@ export class AccountsService {
   }
 
   async findAllAccounts(workspaceId: string, userId: string) {
+    // Bank accounts always live in the user's personal workspace, regardless of which
+    // workspace (personal or shared) the caller is currently viewing/adding a transaction to.
     const accounts = await this.prisma.bankAccount.findMany({
-      where: { workspaceId, workspace: { isPersonal: true, ownerId: userId } },
+      where: { workspace: { isPersonal: true, ownerId: userId } },
       include: { cards: true },
       orderBy: { name: 'asc' },
     });
@@ -123,9 +125,11 @@ export class AccountsService {
     return this.decryptCard(card);
   }
 
-  async findAllCards(workspaceId: string) {
+  async findAllCards(userId: string) {
+    // Cards are always linked to a bank account in the user's personal workspace,
+    // so list by ownership rather than by whichever workspace is currently selected.
     const cards = await this.prisma.card.findMany({
-      where: { linkedBankAccount: { workspaceId } },
+      where: { linkedBankAccount: { workspace: { isPersonal: true, ownerId: userId } } },
       include: { linkedBankAccount: true },
       orderBy: { createdAt: 'desc' },
     });
