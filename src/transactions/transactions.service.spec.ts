@@ -218,6 +218,29 @@ describe('TransactionsService — create with subscriptionId (TASK-040)', () => 
         );
         expect(createdTx.subscriptionId).toBe('sub-123');
     });
+
+    it('persists the requesting userId as the transaction owner', async () => {
+        const createdTx = makeTx({ id: 'tx-new', description: null });
+        prisma.transaction.create.mockResolvedValue(createdTx);
+
+        const dto: any = {
+            amount: 500,
+            currency: 'ARS',
+            date: new Date().toISOString(),
+            type: 'EXPENSE',
+            categoryId: 'cat-1',
+        };
+
+        await service.create('ws-1', dto, 'user-A');
+
+        expect(prisma.transaction.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: expect.objectContaining({
+                    userId: 'user-A',
+                }),
+            }),
+        );
+    });
 });
 
 describe('TransactionsService — create with SAVING type (TASK-041)', () => {
