@@ -1,6 +1,6 @@
 import { Injectable, ForbiddenException, ConflictException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { UpdateCategoryDto } from './dto/category.dto';
+import { CreateCategoryDto, UpdateCategoryDto } from './dto/category.dto';
 
 @Injectable()
 export class CategoriesService {
@@ -39,6 +39,37 @@ export class CategoriesService {
         const workspace = categories.filter(c => c.scope === 'WORKSPACE' && c.workspaceId === params?.workspaceId);
 
         return { global, personal, workspace };
+    }
+
+    async create(dto: CreateCategoryDto, userId: string) {
+        if (dto.scope === 'WORKSPACE') {
+            if (!dto.workspaceId) throw new ForbiddenException('workspaceId requerido para categorías de workspace');
+            const workspace = await this.prisma.workspace.findFirst({
+                where: {
+                    id: dto.workspaceId,
+                    OR: [
+                        { ownerId: userId },
+                        { members: { some: { userId } } },
+                    ],
+                },
+            });
+            if (!workspace) throw new ForbiddenException('Access denied to workspace');
+        } else if (dto.scope !== 'PERSONAL') {
+            throw new ForbiddenException('Solo se pueden crear categorías personales o de workspace');
+        }
+
+        return this.prisma.category.create({
+            data: {
+                name: dto.name,
+                type: dto.type,
+                color: dto.color,
+                icon: dto.icon,
+                scope: dto.scope,
+                userId: dto.scope === 'PERSONAL' ? userId : undefined,
+                workspaceId: dto.scope === 'WORKSPACE' ? dto.workspaceId : undefined,
+                isSystem: false,
+            },
+        });
     }
 
     async update(id: string, dto: UpdateCategoryDto, userId: string) {
