@@ -46,7 +46,7 @@ export class TransactionsController {
 
     @Patch(':id')
     update(@Request() req, @Param('id') id: string, @Body() dto: UpdateTransactionDto) {
-        return this.transactionsService.update(id, req.workspaceId, dto);
+        return this.transactionsService.update(id, req.workspaceId, dto, req.user.id);
     }
 
     @Patch(':id/assign-payment')

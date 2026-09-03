@@ -3,6 +3,9 @@
 /node_modules
 /build
 *.tsbuildinfo
+scripts/*.js
+scripts/*.d.ts
+scripts/*.js.map
 
 # Logs
 logs

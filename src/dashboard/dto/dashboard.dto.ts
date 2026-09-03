@@ -30,7 +30,7 @@ export class DueEventDto {
     date: Date;
     description: string;
     amount: number | null;
-    type: 'RECURRENT_TRANSACTION' | 'CARD_STATEMENT_CLOSE' | 'CARD_DUE';
+    type: 'RECURRENT_TRANSACTION' | 'CARD_STATEMENT_CLOSE' | 'CARD_DUE' | 'SUBSCRIPTION';
     currency: string | null;
 }
 

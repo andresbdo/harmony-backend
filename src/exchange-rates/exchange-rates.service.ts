@@ -17,10 +17,16 @@ export class ExchangeRatesService {
     const startOfTomorrow = new Date(startOfToday);
     startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
 
+    // Only a named quote (e.g. "Oficial", "Blue") counts as a real rate fetched from
+    // dolarapi. prisma/seed.ts also writes an unnamed USD->ARS placeholder row (a rough
+    // 1000 approximation meant only as a last-resort fallback) — if that row lands on
+    // today's date, treating it as "already have today's rate" would skip the real
+    // dolarapi fetch below for the rest of the day.
     const cachedRecords = await this.prisma.exchangeRate.findMany({
       where: {
         fromCurrency: 'USD',
         toCurrency: 'ARS',
+        name: { not: null },
         date: {
           gte: startOfToday,
           lt: startOfTomorrow,

@@ -33,7 +33,7 @@ export class TransactionsService {
         return transaction;
     }
 
-    private async validatePaymentMethod(dto: CreateTransactionDto | UpdateTransactionDto, workspaceId: string) {
+    private async validatePaymentMethod(dto: CreateTransactionDto | UpdateTransactionDto, userId: string) {
         if (dto.paymentMethod === PaymentMethod.CARD && !dto.cardId) {
             throw new BadRequestException('cardId is required when paymentMethod is CARD');
         }
@@ -41,20 +41,22 @@ export class TransactionsService {
             throw new BadRequestException('bankAccountId is required when paymentMethod is BANK_ACCOUNT');
         }
 
+        // Bank accounts/cards live in the payer's personal workspace, not in the transaction's
+        // (possibly shared) workspace, so ownership is checked against the payer instead.
         if (dto.bankAccountId) {
             const account = await this.prisma.bankAccount.findFirst({
-                where: { id: dto.bankAccountId, workspaceId },
+                where: { id: dto.bankAccountId, workspace: { isPersonal: true, ownerId: userId } },
                 select: { id: true },
             });
-            if (!account) throw new BadRequestException('bankAccountId does not belong to this workspace');
+            if (!account) throw new BadRequestException('bankAccountId does not belong to you');
         }
 
         if (dto.cardId) {
             const card = await this.prisma.card.findFirst({
-                where: { id: dto.cardId, linkedBankAccount: { workspaceId } },
+                where: { id: dto.cardId, linkedBankAccount: { workspace: { isPersonal: true, ownerId: userId } } },
                 select: { id: true },
             });
-            if (!card) throw new BadRequestException('cardId does not belong to this workspace');
+            if (!card) throw new BadRequestException('cardId does not belong to you');
         }
     }
 
@@ -108,7 +110,7 @@ export class TransactionsService {
     }
 
     async create(workspaceId: string, dto: CreateTransactionDto, userId: string) {
-        await this.validatePaymentMethod(dto, workspaceId);
+        await this.validatePaymentMethod(dto, userId);
         const expenseGroupId = await this.resolveExpenseGroupId(dto.categoryId, dto.expenseGroupId, dto.type);
 
         let subscriptionId: string | undefined;
@@ -223,9 +225,9 @@ export class TransactionsService {
         return requestingUserId ? this.stripPaymentDetails(decrypted, requestingUserId) : decrypted;
     }
 
-    async update(id: string, workspaceId: string, updateTransactionDto: UpdateTransactionDto) {
+    async update(id: string, workspaceId: string, updateTransactionDto: UpdateTransactionDto, userId: string) {
         const existing = await this.findOne(id, workspaceId);
-        await this.validatePaymentMethod(updateTransactionDto, workspaceId);
+        await this.validatePaymentMethod(updateTransactionDto, userId);
         const expenseGroupId = await this.resolveExpenseGroupId(
             updateTransactionDto.categoryId,
             updateTransactionDto.expenseGroupId,

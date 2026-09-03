@@ -82,5 +82,30 @@ describe('ExchangeRatesService', () => {
         expect(secondCall.where.date).toBeUndefined();
       });
     });
+
+    describe('GIVEN only the unnamed seed placeholder rate is cached for today', () => {
+      beforeEach(() => {
+        // prisma/seed.ts writes a nameless USD->ARS row (a rough 1000 fallback) dated
+        // "today" every time it runs — that row must not be mistaken for a live quote.
+        mockPrisma.exchangeRate.findMany.mockResolvedValueOnce([]);
+
+        jest.spyOn(global, 'fetch').mockResolvedValueOnce({
+          ok: true,
+          json: async () => [{ nombre: 'Oficial', compra: 950, venta: 1000 }],
+        } as any);
+      });
+
+      afterEach(() => {
+        jest.restoreAllMocks();
+      });
+
+      it('WHEN getLatest() is called THEN excludes unnamed rows from the "today" cache lookup and fetches live rates', async () => {
+        await service.getLatest();
+
+        const firstCall = mockPrisma.exchangeRate.findMany.mock.calls[0][0];
+        expect(firstCall.where.name).toEqual({ not: null });
+        expect(global.fetch).toHaveBeenCalledWith('https://dolarapi.com/v1/dolares');
+      });
+    });
   });
 });

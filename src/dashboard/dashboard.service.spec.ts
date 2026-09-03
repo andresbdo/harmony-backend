@@ -110,6 +110,59 @@ describe('DashboardService — getCalendarEvents (TASK-043)', () => {
     });
 });
 
+describe('DashboardService — getDueEvents includes gastos fijos', () => {
+    let service: DashboardService;
+    let prisma: any;
+
+    const sub15 = {
+        id: 'sub-1',
+        name: 'Netflix',
+        nextBillingDate: new Date(year, month - 1, 15),
+        amount: 1500,
+        currency: 'ARS',
+        frequency: 'MONTHLY',
+        isActive: true,
+    };
+
+    beforeEach(async () => {
+        prisma = makeMockPrisma({
+            workspaceMember: { findMany: jest.fn().mockResolvedValue([{ workspaceId: wsId }]) },
+            subscription: { findMany: jest.fn().mockResolvedValue([sub15]) },
+            card: { findMany: jest.fn().mockResolvedValue([]) },
+        });
+
+        const module: TestingModule = await Test.createTestingModule({
+            providers: [
+                DashboardService,
+                { provide: PrismaService, useValue: prisma },
+                {
+                    provide: EncryptionService,
+                    useValue: { encrypt: (v: string) => v, decrypt: (v: string) => v },
+                },
+                { provide: HolidaysService, useValue: mockHolidaysService },
+            ],
+        }).compile();
+
+        service = module.get<DashboardService>(DashboardService);
+    });
+
+    it('includes an active subscription whose next billing date falls in the window', async () => {
+        const from = new Date(year, month - 1, 1);
+        const to = new Date(year, month, 0);
+
+        const events = await service.getDueEvents(userId, from, to);
+
+        expect(events).toContainEqual(
+            expect.objectContaining({
+                type: 'SUBSCRIPTION',
+                description: 'Netflix',
+                amount: 1500,
+                currency: 'ARS',
+            }),
+        );
+    });
+});
+
 describe('DashboardService — getSummary balances', () => {
     let service: DashboardService;
     let prisma: any;
